@@ -144,9 +144,9 @@ function generateVIs(name, type) {
   const n = normalizeName(name);
   const p = 'ha_' + n;
   switch (type) {
-    case 'switch': return [`${p}_on`];
-    case 'dimmer': return [`${p}_on`, `${p}_brightness`];
-    case 'color':  return [`${p}_on`, `${p}_brightness`, `${p}_hue`, `${p}_saturation`];
+    case 'switch': return [`${p}_on`, `${p}_off`];
+    case 'dimmer': return [`${p}_on`, `${p}_off`, `${p}_brightness`];
+    case 'color':  return [`${p}_on`, `${p}_off`, `${p}_brightness`, `${p}_hue`, `${p}_saturation`];
     case 'scene':  return [`${p}_activate`];
     default: return [];
   }

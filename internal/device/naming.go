@@ -33,11 +33,14 @@ func GenerateVirtualInputs(name string, dtype DeviceType) map[string]string {
 	switch dtype {
 	case TypeSwitch:
 		m["on"] = prefix + "_on"
+		m["off"] = prefix + "_off"
 	case TypeDimmer:
 		m["on"] = prefix + "_on"
+		m["off"] = prefix + "_off"
 		m["brightness"] = prefix + "_brightness"
 	case TypeColor:
 		m["on"] = prefix + "_on"
+		m["off"] = prefix + "_off"
 		m["brightness"] = prefix + "_brightness"
 		m["hue"] = prefix + "_hue"
 		m["saturation"] = prefix + "_saturation"

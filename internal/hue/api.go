@@ -186,15 +186,20 @@ func (a *API) handleStateChange(w http.ResponseWriter, r *http.Request, d *devic
 
 	if body.On != nil {
 		state.On = *body.On
-		val := "0"
 		if *body.On {
-			val = "1"
-		}
-		if vi, ok := d.VirtualInputs["on"]; ok {
-			a.send(d.ID, vi, val)
-		}
-		if vi, ok := d.VirtualInputs["activate"]; ok && *body.On {
-			a.send(d.ID, vi, "1")
+			if vi, ok := d.VirtualInputs["on"]; ok {
+				a.send(d.ID, vi, "1")
+			}
+			if vi, ok := d.VirtualInputs["activate"]; ok {
+				a.send(d.ID, vi, "1")
+			}
+		} else {
+			if vi, ok := d.VirtualInputs["off"]; ok {
+				a.send(d.ID, vi, "1")
+			} else if vi, ok := d.VirtualInputs["on"]; ok {
+				// backward compat: devices without off VI get on=0
+				a.send(d.ID, vi, "0")
+			}
 		}
 		responses = append(responses, success(prefix+"on", *body.On))
 	}
