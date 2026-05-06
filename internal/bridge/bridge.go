@@ -17,7 +17,7 @@ import (
 	"github.com/BattloXX/EchoLox/internal/web"
 )
 
-func Run(cfg *Config) error {
+func Run(cfg *Config, cfgPath string) error {
 	dbPath := filepath.Join(cfg.DataDir, "devices.json")
 	mgr, err := device.NewManager(dbPath)
 	if err != nil {
@@ -62,7 +62,7 @@ func Run(cfg *Config) error {
 	hueAPI := hue.NewAPI(mgr, loxClient, verifier, info)
 	hueAPI.Register(mux)
 
-	apiHandler := api.NewHandler(mgr, loxClient, verifier, lbs)
+	apiHandler := api.NewHandler(mgr, loxClient, verifier, lbs, cfgPath)
 	apiHandler.Register(mux)
 
 	webHandler := web.NewHandler(mgr, verifier, lbs, web.WebConfig{

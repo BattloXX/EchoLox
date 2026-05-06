@@ -29,7 +29,7 @@ func main() {
 	}
 
 	log.Printf("EchoLox starting on port %d", cfg.Server.Port)
-	if err := bridge.Run(cfg); err != nil {
+	if err := bridge.Run(cfg, *cfgPath); err != nil {
 		log.Fatal(err)
 	}
 }

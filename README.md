@@ -564,6 +564,19 @@ Erzeugt `EchoLox-1.0.0.zip` â€” direkt in den LoxBerry Plugin Manager hochl
    iptables -A INPUT -p udp --dport 1900 -j ACCEPT
    ```
 
+6. **SSDP-Konflikt auf LoxBerry?** LoxBerry und der Loxone Miniserver nutzen selbst SSDP/UPnP (Port 1900 UDP). Wenn ein anderer Dienst Port 1900 exklusiv belegt, kann EchoLox den SSDP-Listener nicht starten:
+   ```bash
+   # Prüfen ob Port 1900 belegt ist:
+   ss -ulnp | grep 1900
+   ```
+   Falls ein Konflikt besteht (z.B. `avahi-daemon`, `miniupnpd` oder ein anderes Plugin), diesen Dienst stoppen:
+   ```bash
+   systemctl stop avahi-daemon
+   systemctl disable avahi-daemon
+   ```
+   EchoLox benötigt Zugriff auf den UDP-Multicast-Port 1900, um SSDP-M-SEARCH-Anfragen von Alexa empfangen zu können. Ohne funktionierende SSDP-Discovery findet Alexa die Bridge nicht automatisch — die manuelle Geräteerkennung (`description.xml` direkt aufrufen) funktioniert aber weiterhin.
+
+
 ### Alexa erkennt GerÃ¤te, aber Befehle kommen nicht an
 
 1. **Testen-Button** in EchoLox â†’ GerÃ¤teliste â†’ Testen: Sendet einen Testbefehl direkt an den Miniserver.

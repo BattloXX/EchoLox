@@ -41,6 +41,8 @@ async function testDevice(id) {
 
 // ── Device Form ────────────────────────────────────────────────────────────
 
+let currentDeviceId = null;
+
 function initDeviceForm() {
   const params = new URLSearchParams(window.location.search);
   const id = params.get('id');
@@ -61,7 +63,10 @@ function initDeviceForm() {
   typeEl.addEventListener('change', updatePreview);
 
   if (id) {
+    currentDeviceId = id;
     document.getElementById('pageTitle').textContent = 'Gerät bearbeiten';
+    const testBtn = document.getElementById('testDeviceBtn');
+    if (testBtn) testBtn.style.display = '';
     fetch(`${API}/devices/${id}`).then(r => r.json()).then(d => {
       nameEl.value = d.name;
       typeEl.value = d.type;
@@ -85,6 +90,47 @@ function initDeviceForm() {
     }
     window.location.href = 'index.html';
   });
+}
+
+async function testMiniserver() {
+  const result = document.getElementById('msTestResult');
+  result.className = 'test-result info';
+  result.textContent = 'Verbinde mit Miniserver…';
+  try {
+    const res = await fetch(`${API}/verify`, { method: 'POST' });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      result.className = 'test-result ok';
+      result.textContent = '✓ Miniserver erreichbar';
+    } else {
+      result.className = 'test-result error';
+      result.textContent = '✗ ' + (data.error || 'Verbindung fehlgeschlagen');
+    }
+  } catch(e) {
+    result.className = 'test-result error';
+    result.textContent = '✗ ' + e.message;
+  }
+}
+
+async function testCurrentDevice() {
+  if (!currentDeviceId) return;
+  const result = document.getElementById('msTestResult');
+  result.className = 'test-result info';
+  result.textContent = 'Sende Testwert an Loxone…';
+  try {
+    const res = await fetch(`${API}/devices/${currentDeviceId}/test`, { method: 'POST' });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      result.className = 'test-result ok';
+      result.textContent = '✓ Gerät erfolgreich getestet';
+    } else {
+      result.className = 'test-result error';
+      result.textContent = '✗ Fehler: ' + JSON.stringify(data.errors || data);
+    }
+  } catch(e) {
+    result.className = 'test-result error';
+    result.textContent = '✗ ' + e.message;
+  }
 }
 
 function normalizeName(name) {
@@ -154,19 +200,87 @@ function renderStatus() {
 // ── Settings ───────────────────────────────────────────────────────────────
 
 async function loadSettings() {
-  // Load miniserver list
+  // Load miniserver list from LoxBerry
   const msRes = await fetch(`${API}/miniservers`);
   const miniservers = await msRes.json() || [];
   const sel = document.getElementById('miniserver');
   if (sel) {
-    sel.innerHTML = miniservers.map(ms => `<option value="${ms.id}">${ms.name} (${ms.ip})</option>`).join('');
+    sel.innerHTML = miniservers.length
+      ? miniservers.map(ms => `<option value="${ms.id}">${ms.name} (${ms.ip})</option>`).join('')
+      : '<option value="">— kein Miniserver gefunden —</option>';
+  }
+
+  // Load current config values
+  try {
+    const cfgRes = await fetch(`${API}/settings`);
+    if (cfgRes.ok) {
+      const cfg = await cfgRes.json();
+      if (cfg.miniserver && sel) {
+        const opt = sel.querySelector(`option[value="${cfg.miniserver}"]`);
+        if (opt) opt.selected = true;
+      }
+      if (cfg.transport) {
+        const t = document.getElementById('loxTransport');
+        if (t) t.value = cfg.transport;
+      }
+      if (cfg.udp_port) {
+        const u = document.getElementById('udpPort');
+        if (u) u.value = cfg.udp_port;
+      }
+      if (cfg.port) {
+        const p = document.getElementById('serverPort');
+        if (p) p.value = cfg.port;
+      }
+      if (cfg.mqtt_broker) {
+        const m = document.getElementById('mqttBroker');
+        if (m) m.value = cfg.mqtt_broker;
+      }
+    }
+  } catch(_) {}
+
+  // Settings form submit
+  const form = document.getElementById('settingsForm');
+  if (form) {
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const body = {
+        miniserver: document.getElementById('miniserver')?.value || '',
+        transport:  document.getElementById('loxTransport')?.value || 'http',
+        udp_port:   parseInt(document.getElementById('udpPort')?.value) || 7777,
+        port:       parseInt(document.getElementById('serverPort')?.value) || 8079,
+        mqtt_broker: document.getElementById('mqttBroker')?.value || '',
+      };
+      const res = await fetch(`${API}/settings`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      const notice = document.getElementById('saveNotice');
+      if (notice) notice.textContent = data.message || (res.ok ? '✓ Gespeichert' : '✗ Fehler');
+      setTimeout(() => { if (notice) notice.textContent = ''; }, 4000);
+    });
   }
 }
 
 async function testConnection() {
-  const res = await fetch(`${API}/verify`, { method: 'POST' });
-  const data = await res.json();
-  document.getElementById('testResult').textContent = data.status === 'ok' ? '✅ Verbindung OK' : '❌ ' + (data.error || 'Fehler');
+  const result = document.getElementById('testResult');
+  result.className = 'test-result info';
+  result.textContent = 'Verbinde…';
+  try {
+    const res = await fetch(`${API}/verify`, { method: 'POST' });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      result.className = 'test-result ok';
+      result.textContent = '✓ Miniserver erreichbar';
+    } else {
+      result.className = 'test-result error';
+      result.textContent = '✗ ' + (data.error || 'Verbindung fehlgeschlagen');
+    }
+  } catch(e) {
+    result.className = 'test-result error';
+    result.textContent = '✗ ' + e.message;
+  }
 }
 
 // ── Import ─────────────────────────────────────────────────────────────────

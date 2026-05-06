@@ -16,37 +16,48 @@
 </nav>
 <div class="container">
   <h1 id="pageTitle">Gerät anlegen</h1>
-  <form id="deviceForm">
-    <div class="form-group">
-      <label>Name</label>
-      <input type="text" id="name" name="name" required placeholder="z.B. Wohnzimmer Licht">
+  <div class="card">
+    <form id="deviceForm">
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="name" name="name" required placeholder="z.B. Wohnzimmer Licht">
+      </div>
+      <div class="form-group">
+        <label>Typ</label>
+        <select id="type" name="type">
+          <option value="switch">Schalter (switch)</option>
+          <option value="dimmer">Dimmer (dimmer)</option>
+          <option value="color">Farbe (color)</option>
+          <option value="scene">Szene (scene)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Transport</label>
+        <select id="transport" name="transport">
+          <option value="http">HTTP</option>
+          <option value="udp">UDP</option>
+          <option value="mqtt">MQTT</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Virtual Input Namen (auto-generiert)</label>
+        <div id="viPreview" class="vi-preview"><em>Bitte Name eingeben</em></div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Speichern</button>
+        <a href="index.html" class="btn">Abbrechen</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Verbindungstest</div>
+    <div class="form-actions" style="margin-top:0">
+      <button type="button" onclick="testMiniserver()" class="btn">Miniserver testen</button>
+      <button type="button" id="testDeviceBtn" onclick="testCurrentDevice()" class="btn" style="display:none">Gerät testen</button>
     </div>
-    <div class="form-group">
-      <label>Typ</label>
-      <select id="type" name="type">
-        <option value="switch">Schalter (switch)</option>
-        <option value="dimmer">Dimmer (dimmer)</option>
-        <option value="color">Farbe (color)</option>
-        <option value="scene">Szene (scene)</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label>Transport</label>
-      <select id="transport" name="transport">
-        <option value="http">HTTP</option>
-        <option value="udp">UDP</option>
-        <option value="mqtt">MQTT</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label>Virtual Input Namen (auto-generiert)</label>
-      <div id="viPreview" class="vi-preview"></div>
-    </div>
-    <div class="form-actions">
-      <button type="submit" class="btn btn-primary">Speichern</button>
-      <a href="index.html" class="btn">Abbrechen</a>
-    </div>
-  </form>
+    <div id="msTestResult" class="test-result"></div>
+  </div>
 </div>
 <script src="assets/app.js"></script>
 <script>initDeviceForm();</script>
