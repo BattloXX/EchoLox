@@ -42,11 +42,10 @@ jobs:
       - name: Build binaries
         run: |
           go mod tidy
-          BINARY=EchoLox V=${{ steps.ver.outputs.version }}
-          LDFLAGS="-ldflags=-s -w -X main.version=${{ steps.ver.outputs.version }}"
-          GOOS=linux GOARCH=arm64      go build $LDFLAGS -o bin/EchoLox-arm64 ./cmd/EchoLox
-          GOOS=linux GOARCH=arm GOARM=7 go build $LDFLAGS -o bin/EchoLox-armv7 ./cmd/EchoLox
-          GOOS=linux GOARCH=amd64      go build $LDFLAGS -o bin/EchoLox-amd64  ./cmd/EchoLox
+          V="${{ steps.ver.outputs.version }}"
+          GOOS=linux GOARCH=arm64       go build -ldflags="-s -w -X main.version=$V" -o bin/EchoLox-arm64 ./cmd/EchoLox
+          GOOS=linux GOARCH=arm GOARM=7 go build -ldflags="-s -w -X main.version=$V" -o bin/EchoLox-armv7 ./cmd/EchoLox
+          GOOS=linux GOARCH=amd64       go build -ldflags="-s -w -X main.version=$V" -o bin/EchoLox-amd64  ./cmd/EchoLox
 
       - name: Stamp version into plugin.cfg and Makefile
         run: |
