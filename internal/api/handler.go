@@ -17,6 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/BattloXX/EchoLox/internal/device"
+	"github.com/BattloXX/EchoLox/internal/logbuf"
 	"github.com/BattloXX/EchoLox/internal/loxone"
 )
 
@@ -46,6 +47,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/echolox/api/backup/restore-local", h.handleBackupRestoreLocal)
 	mux.HandleFunc("/echolox/api/backup/delete", h.handleBackupDelete)
 	mux.HandleFunc("/echolox/api/backup", h.handleBackup)
+	mux.HandleFunc("/echolox/api/logs/download", h.handleLogsDownload)
+	mux.HandleFunc("/echolox/api/logs/level", h.handleLogsLevel)
+	mux.HandleFunc("/echolox/api/logs", h.handleLogs)
 }
 
 func (h *Handler) handleDevices(w http.ResponseWriter, r *http.Request) {
@@ -207,8 +211,9 @@ func (h *Handler) handleVerify(w http.ResponseWriter, r *http.Request) {
 // configYAML mirrors bridge.Config for reading/writing without an import cycle.
 type configYAML struct {
 	Server struct {
-		Port int    `yaml:"port"`
-		IP   string `yaml:"ip,omitempty"`
+		Port          int    `yaml:"port"`
+		IP            string `yaml:"ip,omitempty"`
+		DiscoveryPort int    `yaml:"discovery_port,omitempty"`
 	} `yaml:"server"`
 	UPNP struct {
 		Name string `yaml:"name,omitempty"`
@@ -252,20 +257,22 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		cfg := readCfg()
 		writeJSON(w, map[string]interface{}{
-			"miniserver":  cfg.Loxone.Miniserver,
-			"transport":   cfg.Loxone.Transport,
-			"udp_port":    cfg.Loxone.UDPPort,
-			"port":        cfg.Server.Port,
-			"mqtt_broker": cfg.MQTT.Broker,
+			"miniserver":     cfg.Loxone.Miniserver,
+			"transport":      cfg.Loxone.Transport,
+			"udp_port":       cfg.Loxone.UDPPort,
+			"port":           cfg.Server.Port,
+			"discovery_port": cfg.Server.DiscoveryPort,
+			"mqtt_broker":    cfg.MQTT.Broker,
 		})
 
 	case http.MethodPost:
 		var req struct {
-			Miniserver string `json:"miniserver"`
-			Transport  string `json:"transport"`
-			UDPPort    int    `json:"udp_port"`
-			Port       int    `json:"port"`
-			MQTTBroker string `json:"mqtt_broker"`
+			Miniserver    string `json:"miniserver"`
+			Transport     string `json:"transport"`
+			UDPPort       int    `json:"udp_port"`
+			Port          int    `json:"port"`
+			DiscoveryPort int    `json:"discovery_port"`
+			MQTTBroker    string `json:"mqtt_broker"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), 400)
@@ -284,6 +291,7 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 		if req.Port > 0 {
 			cfg.Server.Port = req.Port
 		}
+		cfg.Server.DiscoveryPort = req.DiscoveryPort
 		if req.MQTTBroker != "" {
 			cfg.MQTT.Broker = req.MQTTBroker
 		}
@@ -550,6 +558,81 @@ func (h *Handler) restoreFromZipBytes(w http.ResponseWriter, data []byte) {
 		return
 	}
 	writeJSON(w, map[string]interface{}{"status": "ok", "restored": restored})
+}
+
+// ── Logs ───────────────────────────────────────────────────────────────────
+
+func (h *Handler) handleLogs(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	entries := logbuf.Global.Entries()
+	type entry struct {
+		T     string `json:"t"`
+		Level string `json:"level"`
+		Msg   string `json:"msg"`
+	}
+	result := make([]entry, len(entries))
+	for i, e := range entries {
+		result[i] = entry{T: e.T.Format("2006-01-02 15:04:05"), Level: e.Level, Msg: e.Msg}
+	}
+	lvl := "info"
+	if logbuf.Global.GetLevel() == logbuf.LevelDebug {
+		lvl = "debug"
+	}
+	writeJSON(w, map[string]interface{}{"level": lvl, "entries": result})
+}
+
+func (h *Handler) handleLogsLevel(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		Level string `json:"level"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	switch strings.ToLower(req.Level) {
+	case "debug":
+		logbuf.Global.SetLevel(logbuf.LevelDebug)
+		logbuf.Global.Info("Log level set to DEBUG")
+	default:
+		logbuf.Global.SetLevel(logbuf.LevelInfo)
+		logbuf.Global.Info("Log level set to INFO")
+	}
+	lvl := "info"
+	if logbuf.Global.GetLevel() == logbuf.LevelDebug {
+		lvl = "debug"
+	}
+	writeJSON(w, map[string]string{"status": "ok", "level": lvl})
+}
+
+func (h *Handler) handleLogsDownload(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	entries := logbuf.Global.Entries()
+	var sb strings.Builder
+	for _, e := range entries {
+		sb.WriteString(e.T.Format("2006-01-02 15:04:05"))
+		sb.WriteString(" [")
+		sb.WriteString(e.Level)
+		sb.WriteString("] ")
+		sb.WriteString(e.Msg)
+		sb.WriteByte('\n')
+	}
+	ts := time.Now().Format("20060102_150405")
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="echolox_%s.log"`, ts))
+	w.Write([]byte(sb.String()))
 }
 
 func setCORS(w http.ResponseWriter) {

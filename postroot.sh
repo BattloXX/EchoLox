@@ -39,7 +39,7 @@ if [ ! -f "$CFGFILE" ]; then
     cat > "$CFGFILE" << 'CFGEOF'
 server:
   port: 8079
-  ip: ""
+  discovery_port: 0
 
 loxone:
   miniserver: "1"
@@ -50,6 +50,87 @@ data_dir: ""
 CFGEOF
     echo "<OK> EchoLox default config created"
   fi
+fi
+
+# ── Try to configure nginx proxy for Alexa port-80 discovery ──────────────
+# Alexa (post-2019 firmware) requires the Hue Bridge API on port 80.
+# EchoLox runs on port 8079; nginx proxies specific Hue paths to it.
+NGINX_PROXY_OK=1
+if command -v python3 >/dev/null 2>&1; then
+python3 - <<'PYEOF'
+import os, subprocess, sys
+
+SITES = [
+    '/etc/nginx/sites-enabled/loxberry.conf',
+    '/etc/nginx/sites-enabled/loxberry',
+    '/etc/nginx/sites-enabled/default',
+    '/etc/nginx/conf.d/default.conf',
+]
+
+BLOCK = (
+    '\n    # echolox-hue-proxy\n'
+    '    location ~ ^/(api/|description\\.xml$|hue_logo|favicon\\.ico$) {\n'
+    '        proxy_pass http://127.0.0.1:8079;\n'
+    '        proxy_set_header Host $host;\n'
+    '        proxy_set_header X-Real-IP $remote_addr;\n'
+    '        proxy_read_timeout 10s;\n'
+    '    }\n'
+    '    # /echolox-hue-proxy\n'
+)
+
+site = next((s for s in SITES if os.path.exists(s)), None)
+if not site:
+    print('<WARN> EchoLox: nginx site config not found — configure proxy manually for Alexa (see logs page)')
+    sys.exit(1)
+
+content = open(site).read()
+if 'echolox-hue-proxy' in content:
+    print('<OK> EchoLox nginx proxy already configured')
+    sys.exit(0)
+
+idx = content.rfind('}')
+if idx < 0:
+    print('<WARN> EchoLox: cannot parse nginx config — configure proxy manually')
+    sys.exit(1)
+
+open(site + '.echolox.bak', 'w').write(content)
+open(site, 'w').write(content[:idx] + BLOCK + content[idx:])
+
+r = subprocess.run(['nginx', '-t'], capture_output=True)
+if r.returncode == 0:
+    subprocess.run(['nginx', '-s', 'reload'])
+    print('<OK> EchoLox nginx proxy configured (port 80 -> 8079 for Hue API)')
+    sys.exit(0)
+else:
+    open(site, 'w').write(content)
+    if os.path.exists(site + '.echolox.bak'):
+        os.unlink(site + '.echolox.bak')
+    print('<WARN> EchoLox: nginx config test failed — reverted. Configure proxy manually.')
+    sys.exit(1)
+PYEOF
+NGINX_PROXY_OK=$?
+else
+  echo "<WARN> EchoLox: python3 not found — configure nginx proxy manually for Alexa discovery"
+fi
+
+# If nginx proxy was configured, set discovery_port: 80 in the config
+if [ "$NGINX_PROXY_OK" -eq 0 ] && command -v python3 >/dev/null 2>&1; then
+  python3 - "$CFGFILE" <<'PYCFG'
+import sys, yaml
+path = sys.argv[1]
+try:
+    with open(path) as f:
+        cfg = yaml.safe_load(f) or {}
+    if 'server' not in cfg or not isinstance(cfg['server'], dict):
+        cfg['server'] = {}
+    if cfg['server'].get('discovery_port', 0) == 0:
+        cfg['server']['discovery_port'] = 80
+        with open(path, 'w') as f:
+            yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
+        print('<OK> EchoLox discovery_port set to 80')
+except Exception as e:
+    print('<WARN> EchoLox: could not update discovery_port:', e)
+PYCFG
 fi
 
 # ── LoxBerry daemon init script ────────────────────────────────────────────

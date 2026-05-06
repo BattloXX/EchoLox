@@ -57,3 +57,6 @@ tr:hover td { background: #f7faf2; }
 .backup-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.9em; }
 .backup-item:last-child { border-bottom: none; }
 .backup-item .ts { color: #555; font-family: monospace; }
+#logContainer table { border-radius: 0; box-shadow: none; }
+#logContainer th, #logContainer td { padding: 6px 10px; }
+#logContainer tr:hover td { background: #f5f5f5; }

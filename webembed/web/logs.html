@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EchoLox – Logs</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <span class="brand">EchoLox</span>
+  <button class="nav-toggle" onclick="toggleNav()" aria-label="Menü">&#9776;</button>
+  <div class="nav-links" id="navLinks">
+    <a href="index.html">Geräte</a>
+    <a href="status.html">Status</a>
+    <a href="settings.html">Einstellungen</a>
+    <a href="backup.html">Backup</a>
+    <a href="logs.html">Logs</a>
+    <a href="import.html">Import</a>
+    <a href="about.html">About</a>
+  </div>
+</nav>
+<div class="container">
+  <div class="header-row">
+    <h1>Logs</h1>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span id="levelBadge" class="type-badge" style="font-size:0.9em;padding:4px 12px">INFO</span>
+      <button id="toggleLevelBtn" onclick="toggleLogLevel()" class="btn">Debug aktivieren</button>
+      <a href="/echolox/api/logs/download" class="btn">Download</a>
+      <button id="autoRefreshBtn" onclick="toggleAutoRefresh()" class="btn">Auto-Refresh</button>
+      <button onclick="loadLogs()" class="btn btn-primary">Aktualisieren</button>
+    </div>
+  </div>
+
+  <div class="card" style="padding:0;overflow:hidden">
+    <div id="logContainer" style="max-height:70vh;overflow-y:auto;font-family:monospace;font-size:0.82em">
+      <table style="border-radius:0;box-shadow:none">
+        <thead>
+          <tr>
+            <th style="white-space:nowrap;width:160px">Zeit</th>
+            <th style="width:60px">Level</th>
+            <th>Nachricht</th>
+          </tr>
+        </thead>
+        <tbody id="logBody"><tr><td colspan="3" style="color:#999;text-align:center">Wird geladen…</td></tr></tbody>
+      </table>
+    </div>
+    <div style="padding:8px 16px;font-size:0.8em;color:#888;border-top:1px solid #ebebeb" id="logMeta"></div>
+  </div>
+
+  <div class="card" style="font-size:0.85em;color:#555">
+    <div class="section-title">Alexa-Erkennung: Hilfe</div>
+    <p style="margin-bottom:8px">Alexa (ab 2019) erwartet den Hue Bridge-API auf <strong>Port 80</strong>. EchoLox läuft standardmäßig auf Port 8079.</p>
+    <p style="margin-bottom:8px"><strong>Lösung:</strong> Nginx-Proxy in LoxBerry konfigurieren. Füge folgende Location-Blöcke zum aktiven nginx-Server-Block hinzu:</p>
+    <pre class="vi-preview" style="white-space:pre-wrap;word-break:break-all">location ~ ^/(api/|description\.xml$|hue_logo|favicon\.ico$) {
+    proxy_pass http://127.0.0.1:8079;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}</pre>
+    <p style="margin-top:8px">Danach <strong>Discovery-Port auf 80</strong> in den <a href="settings.html">Einstellungen</a> setzen und EchoLox neu starten.</p>
+  </div>
+</div>
+<script src="assets/app.js"></script>
+<script>loadLogs();</script>
+</body>
+</html>

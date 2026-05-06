@@ -15,6 +15,7 @@
     <a href="status.html">Status</a>
     <a href="settings.html">Einstellungen</a>
     <a href="backup.html">Backup</a>
+    <a href="logs.html">Logs</a>
     <a href="import.html">Import</a>
     <a href="about.html">About</a>
   </div>
@@ -42,6 +43,11 @@
       <div class="form-group">
         <label>EchoLox Port</label>
         <input type="number" id="serverPort" value="8079">
+      </div>
+      <div class="form-group">
+        <label>Discovery-Port (SSDP / Alexa)</label>
+        <input type="number" id="discoveryPort" value="0" placeholder="0 = gleich wie EchoLox-Port">
+        <small style="color:#888;display:block;margin-top:4px">Alexa (ab 2019) erwartet Port 80. Setze auf 80 und konfiguriere einen nginx-Proxy (Infos unter <a href="logs.html">Logs</a>).</small>
       </div>
       <div class="form-group">
         <label>MQTT Broker</label>

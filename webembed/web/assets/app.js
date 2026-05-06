@@ -259,6 +259,10 @@ async function loadSettings() {
         const p = document.getElementById('serverPort');
         if (p) p.value = cfg.port;
       }
+      if (cfg.discovery_port !== undefined) {
+        const dp = document.getElementById('discoveryPort');
+        if (dp) dp.value = cfg.discovery_port;
+      }
       if (cfg.mqtt_broker) {
         const m = document.getElementById('mqttBroker');
         if (m) m.value = cfg.mqtt_broker;
@@ -275,8 +279,9 @@ async function loadSettings() {
         miniserver: document.getElementById('miniserver')?.value || '',
         transport:  document.getElementById('loxTransport')?.value || 'http',
         udp_port:   parseInt(document.getElementById('udpPort')?.value) || 7777,
-        port:       parseInt(document.getElementById('serverPort')?.value) || 8079,
-        mqtt_broker: document.getElementById('mqttBroker')?.value || '',
+        port:           parseInt(document.getElementById('serverPort')?.value) || 8079,
+        discovery_port: parseInt(document.getElementById('discoveryPort')?.value) || 0,
+        mqtt_broker:    document.getElementById('mqttBroker')?.value || '',
       };
       const res = await fetch(`${API}/settings`, {
         method: 'POST',
@@ -485,6 +490,90 @@ async function handleFile(file) {
   });
 
   document.getElementById('previewSection').style.display = 'block';
+}
+
+// ── Logs ───────────────────────────────────────────────────────────────────
+
+let logAutoRefreshTimer = null;
+let logAutoRefresh = false;
+let currentLogLevel = 'info';
+
+async function loadLogs() {
+  try {
+    const res = await fetch(`${API}/logs`);
+    const data = await res.json();
+    currentLogLevel = data.level || 'info';
+    updateLevelUI(currentLogLevel);
+    renderLogs(data.entries || []);
+  } catch(e) {
+    const tbody = document.getElementById('logBody');
+    if (tbody) tbody.innerHTML = `<tr><td colspan="3" style="color:#c00">Fehler: ${e.message}</td></tr>`;
+  }
+}
+
+function renderLogs(entries) {
+  const tbody = document.getElementById('logBody');
+  if (!tbody) return;
+  if (!entries.length) {
+    tbody.innerHTML = '<tr><td colspan="3" style="color:#999;text-align:center">Keine Einträge</td></tr>';
+    return;
+  }
+  tbody.innerHTML = entries.map(e => {
+    const color = e.level === 'DEBUG' ? '#999' : e.level === 'INFO' ? '#333' : '#b00';
+    return `<tr>
+      <td style="white-space:nowrap;color:#888">${e.t}</td>
+      <td style="color:${color};font-weight:${e.level==='DEBUG'?'normal':'bold'}">${e.level}</td>
+      <td style="word-break:break-word">${escapeHtml(e.msg)}</td>
+    </tr>`;
+  }).join('');
+  const meta = document.getElementById('logMeta');
+  if (meta) meta.textContent = `${entries.length} Einträge`;
+  // Auto-scroll to bottom
+  const container = document.getElementById('logContainer');
+  if (container) container.scrollTop = container.scrollHeight;
+}
+
+function updateLevelUI(level) {
+  const badge = document.getElementById('levelBadge');
+  const btn = document.getElementById('toggleLevelBtn');
+  if (badge) {
+    badge.textContent = level.toUpperCase();
+    badge.style.background = level === 'debug' ? '#fff3cd' : '#e0ecd0';
+    badge.style.color = level === 'debug' ? '#856404' : '#3a6010';
+  }
+  if (btn) btn.textContent = level === 'debug' ? 'Debug deaktivieren' : 'Debug aktivieren';
+}
+
+async function toggleLogLevel() {
+  const newLevel = currentLogLevel === 'debug' ? 'info' : 'debug';
+  try {
+    const res = await fetch(`${API}/logs/level`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({level: newLevel})
+    });
+    const data = await res.json();
+    currentLogLevel = data.level || newLevel;
+    updateLevelUI(currentLogLevel);
+    loadLogs();
+  } catch(e) { console.error(e); }
+}
+
+function toggleAutoRefresh() {
+  logAutoRefresh = !logAutoRefresh;
+  const btn = document.getElementById('autoRefreshBtn');
+  if (logAutoRefresh) {
+    if (btn) { btn.textContent = 'Auto-Refresh stoppen'; btn.classList.add('active'); }
+    logAutoRefreshTimer = setInterval(loadLogs, 5000);
+  } else {
+    if (btn) { btn.textContent = 'Auto-Refresh'; btn.classList.remove('active'); }
+    clearInterval(logAutoRefreshTimer);
+    logAutoRefreshTimer = null;
+  }
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 async function confirmImport() {

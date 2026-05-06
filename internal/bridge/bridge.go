@@ -5,12 +5,14 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 
 	"github.com/BattloXX/EchoLox/internal/api"
 	"github.com/BattloXX/EchoLox/internal/device"
 	"github.com/BattloXX/EchoLox/internal/hue"
 	"github.com/BattloXX/EchoLox/internal/identity"
+	"github.com/BattloXX/EchoLox/internal/logbuf"
 	"github.com/BattloXX/EchoLox/internal/loxone"
 	"github.com/BattloXX/EchoLox/internal/migrate"
 	"github.com/BattloXX/EchoLox/internal/upnp"
@@ -18,6 +20,21 @@ import (
 )
 
 func Run(cfg *Config, cfgPath string) error {
+	// Wire standard log package to ring-buffer logger
+	log.SetOutput(logbuf.Global.Writer())
+	log.SetFlags(0) // timestamps handled by logbuf
+
+	// Open log file in LoxBerry log directory
+	logDir := lbPath("LBPLOGDIR", "./log")
+	if err := os.MkdirAll(logDir, 0755); err == nil {
+		logFile := filepath.Join(logDir, "EchoLox.log")
+		if err := logbuf.Global.SetFile(logFile); err != nil {
+			logbuf.Global.Info("WARNING: cannot open log file %s: %v", logFile, err)
+		} else {
+			logbuf.Global.Info("Log file: %s", logFile)
+		}
+	}
+
 	dbPath := filepath.Join(cfg.DataDir, "devices.json")
 	mgr, err := device.NewManager(dbPath)
 	if err != nil {
@@ -26,7 +43,7 @@ func Run(cfg *Config, cfgPath string) error {
 
 	lbs, err := loxone.ReadLoxBerryMiniservers()
 	if err != nil {
-		log.Printf("WARNING: %v — Miniserver commands will be disabled", err)
+		logbuf.Global.Info("WARNING: %v — Miniserver commands will be disabled", err)
 	}
 	var ms *loxone.LBMiniserver
 	if lbs != nil {
@@ -53,10 +70,10 @@ func Run(cfg *Config, cfgPath string) error {
 		bridgeIP = autoDetectIP()
 	}
 
-	// BridgeInfo is derived deterministically from IP — UUID/bridgeid stay
-	// consistent across restarts so Alexa doesn't lose the bridge.
-	info := identity.New(bridgeIP, cfg.Server.Port)
-	log.Printf("Bridge identity: IP=%s  bridgeid=%s  UUID=%s", info.IP, info.BridgeID, info.UUID)
+	discoveryPort := cfg.Server.DiscoveryPort
+	info := identity.New(bridgeIP, cfg.Server.Port, discoveryPort)
+	logbuf.Global.Info("Bridge identity: IP=%s  port=%d  discovery-port=%d  bridgeid=%s",
+		info.IP, info.Port, info.DiscoveryPort, info.BridgeID)
 
 	mux := http.NewServeMux()
 
@@ -81,8 +98,24 @@ func Run(cfg *Config, cfgPath string) error {
 		upnp.NewListener(info).Listen()
 	}()
 
+	// Try to also listen on discovery port when it differs from the main port.
+	// This enables direct port-80 access on standalone (non-LoxBerry) installations.
+	// On LoxBerry, nginx proxies port 80 -> 8079 so this bind will fail — that's expected.
+	if discoveryPort > 0 && discoveryPort != cfg.Server.Port {
+		go func() {
+			addr80 := fmt.Sprintf(":%d", discoveryPort)
+			logbuf.Global.Info("Trying secondary HTTP listener on port %d…", discoveryPort)
+			if err := http.ListenAndServe(addr80, mux); err != nil {
+				logbuf.Global.Info(
+					"Port %d not available (%v). "+
+						"Configure nginx proxy: location ~ ^/(api/|description\\.xml$|hue_logo) { proxy_pass http://127.0.0.1:%d; }",
+					discoveryPort, err, cfg.Server.Port)
+			}
+		}()
+	}
+
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
-	log.Printf("HTTP server listening on %s", addr)
+	logbuf.Global.Info("EchoLox HTTP server listening on %s", addr)
 	return http.ListenAndServe(addr, mux)
 }
 
