@@ -1,0 +1,38 @@
+#!/bin/bash
+LBHOMEDIR="${LBHOMEDIR:-/opt/loxberry}"
+BINARY="$LBHOMEDIR/bin/plugins/EchoLox/EchoLox"
+CFGFILE="$LBHOMEDIR/config/plugins/EchoLox/EchoLox.cfg"
+PIDFILE="/var/run/EchoLox.pid"
+
+case "$1" in
+  start)
+    "$BINARY" --config "$CFGFILE" &
+    echo $! > "$PIDFILE"
+    echo "<OK> EchoLox started (PID $(cat $PIDFILE))"
+    ;;
+  stop)
+    if [ -f "$PIDFILE" ]; then
+      kill $(cat "$PIDFILE") 2>/dev/null && rm -f "$PIDFILE"
+      echo "<OK> EchoLox stopped"
+    else
+      echo "<INFO> EchoLox not running"
+    fi
+    ;;
+  status)
+    if [ -f "$PIDFILE" ] && kill -0 $(cat "$PIDFILE") 2>/dev/null; then
+      echo "running (PID $(cat $PIDFILE))"
+    else
+      echo "stopped"
+    fi
+    ;;
+  restart)
+    $0 stop
+    sleep 1
+    $0 start
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|status|restart}"
+    exit 1
+    ;;
+esac
+exit 0

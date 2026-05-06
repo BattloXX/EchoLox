@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EchoLox – Geräte</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <span class="brand">EchoLox</span>
+  <a href="index.html">Geräte</a>
+  <a href="status.html">Status</a>
+  <a href="settings.html">Einstellungen</a>
+  <a href="import.html">Import</a>
+</nav>
+<div class="container">
+  <div class="header-row">
+    <h1>Geräte</h1>
+    <a href="device.html" class="btn btn-primary">+ Neu</a>
+  </div>
+  <table id="deviceTable">
+    <thead><tr><th>Name</th><th>Typ</th><th>Transport</th><th>Virtual Inputs</th><th>Aktionen</th></tr></thead>
+    <tbody id="deviceBody"></tbody>
+  </table>
+</div>
+<script src="assets/app.js"></script>
+<script>
+loadDevices();
+</script>
+</body>
+</html>

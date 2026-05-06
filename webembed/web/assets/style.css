@@ -1,0 +1,34 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
+.navbar { background: #e8450a; color: white; padding: 12px 24px; display: flex; align-items: center; gap: 24px; }
+.navbar .brand { font-weight: bold; font-size: 1.2em; margin-right: auto; }
+.navbar a { color: white; text-decoration: none; font-size: 0.95em; }
+.navbar a:hover { text-decoration: underline; }
+.container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+.header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+h1 { font-size: 1.5em; }
+.btn { padding: 8px 16px; border: 1px solid #ccc; border-radius: 4px; background: white; cursor: pointer; text-decoration: none; color: #333; font-size: 0.9em; }
+.btn:hover { background: #f0f0f0; }
+.btn-primary { background: #e8450a; color: white; border-color: #c73a08; }
+.btn-primary:hover { background: #c73a08; }
+table { width: 100%; border-collapse: collapse; background: white; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+th { background: #f8f8f8; padding: 12px; text-align: left; font-size: 0.85em; text-transform: uppercase; color: #666; border-bottom: 2px solid #e0e0e0; }
+td { padding: 12px; border-bottom: 1px solid #f0f0f0; font-size: 0.9em; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #fafafa; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; margin-bottom: 6px; font-size: 0.9em; font-weight: 500; }
+.form-group input, .form-group select { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95em; }
+.form-actions { display: flex; gap: 12px; margin-top: 24px; }
+.vi-preview { background: #f8f8f8; border: 1px solid #e0e0e0; border-radius: 4px; padding: 12px; font-family: monospace; font-size: 0.85em; }
+.vi-preview div { padding: 2px 0; }
+.filter-row { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+.filter-row input { padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; margin-left: auto; }
+.status-ok { color: #2e7d32; }
+.status-not_found { color: #e65100; }
+.status-access_denied { color: #c62828; }
+.status-not_sent { color: #999; }
+.upload-area { border: 2px dashed #ccc; border-radius: 8px; padding: 40px; text-align: center; background: white; margin-bottom: 24px; }
+.upload-area.dragover { border-color: #e8450a; background: #fff5f0; }
+.type-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; background: #e8e8e8; }
+.action-btn { padding: 4px 10px; font-size: 0.8em; margin-right: 4px; }

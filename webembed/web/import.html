@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EchoLox – Import</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <span class="brand">EchoLox</span>
+  <a href="index.html">Geräte</a>
+  <a href="status.html">Status</a>
+  <a href="settings.html">Einstellungen</a>
+  <a href="import.html">Import</a>
+</nav>
+<div class="container">
+  <h1>Alte Konfiguration importieren</h1>
+  <p>Lade deine <code>devices.db</code> aus der alten HA Bridge Konfiguration hoch.</p>
+  <div class="upload-area" id="dropZone">
+    <input type="file" id="fileInput" accept=".db,.json" style="display:none">
+    <p>Drag &amp; Drop oder <button onclick="document.getElementById('fileInput').click()" class="btn">Datei wählen</button></p>
+    <p id="fileName" style="color:#666"></p>
+  </div>
+  <div id="previewSection" style="display:none">
+    <h2>Vorschau</h2>
+    <table>
+      <thead><tr><th>Alter Name</th><th>Neue Virtual Inputs</th><th>Status</th></tr></thead>
+      <tbody id="previewBody"></tbody>
+    </table>
+    <div class="form-actions">
+      <button onclick="confirmImport()" class="btn btn-primary">Importieren</button>
+      <button onclick="resetImport()" class="btn">Zurücksetzen</button>
+    </div>
+  </div>
+  <div id="importResult"></div>
+</div>
+<script src="assets/app.js"></script>
+<script>initImport();</script>
+</body>
+</html>

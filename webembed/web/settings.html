@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EchoLox – Einstellungen</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <span class="brand">EchoLox</span>
+  <a href="index.html">Geräte</a>
+  <a href="status.html">Status</a>
+  <a href="settings.html">Einstellungen</a>
+  <a href="import.html">Import</a>
+</nav>
+<div class="container">
+  <h1>Einstellungen</h1>
+  <form id="settingsForm">
+    <div class="form-group">
+      <label>Miniserver</label>
+      <select id="miniserver"></select>
+    </div>
+    <div class="form-group">
+      <label>Transport</label>
+      <select id="loxTransport">
+        <option value="http">HTTP</option>
+        <option value="udp">UDP</option>
+        <option value="mqtt">MQTT</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>UDP Port</label>
+      <input type="number" id="udpPort" value="7777">
+    </div>
+    <div class="form-group">
+      <label>EchoLox Port</label>
+      <input type="number" id="serverPort" value="8083">
+    </div>
+    <div class="form-group">
+      <label>MQTT Broker</label>
+      <input type="text" id="mqttBroker" placeholder="tcp://localhost:1883">
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Speichern</button>
+      <button type="button" onclick="testConnection()" class="btn">Verbindung testen</button>
+    </div>
+  </form>
+  <div id="testResult"></div>
+</div>
+<script src="assets/app.js"></script>
+<script>loadSettings();</script>
+</body>
+</html>

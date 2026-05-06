@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EchoLox – Status</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <span class="brand">EchoLox</span>
+  <a href="index.html">Geräte</a>
+  <a href="status.html">Status</a>
+  <a href="settings.html">Einstellungen</a>
+  <a href="import.html">Import</a>
+</nav>
+<div class="container">
+  <div class="header-row">
+    <h1>Virtual Input Status</h1>
+    <button onclick="refreshStatus()" class="btn">Refresh</button>
+  </div>
+  <div class="filter-row">
+    <button onclick="filterStatus('all')" class="btn active" id="f-all">Alle</button>
+    <button onclick="filterStatus('ok')" class="btn" id="f-ok">OK</button>
+    <button onclick="filterStatus('not_found')" class="btn" id="f-nf">Not Found</button>
+    <button onclick="filterStatus('not_sent')" class="btn" id="f-ns">Not Sent</button>
+    <input type="text" id="searchInput" placeholder="Suche..." oninput="filterStatus(currentFilter)">
+  </div>
+  <table>
+    <thead><tr><th>Status</th><th>Virtual Input Name</th><th>Gerät</th><th>Letzter Wert</th><th>Zuletzt gesendet</th></tr></thead>
+    <tbody id="statusBody"></tbody>
+  </table>
+</div>
+<script src="assets/app.js"></script>
+<script>loadStatus();</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+bin/EchoLox
+bin/EchoLox-arm64
+bin/EchoLox-armv7
+bin/EchoLox-amd64
+*.zip
+data/
+*.tmp
