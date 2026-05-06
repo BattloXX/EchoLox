@@ -28,7 +28,7 @@ func NormalizeName(name string) string {
 
 func GenerateVirtualInputs(name string, dtype DeviceType) map[string]string {
 	n := NormalizeName(name)
-	prefix := "ha_" + n
+	prefix := "echolox_" + n
 	m := map[string]string{}
 	switch dtype {
 	case TypeSwitch:

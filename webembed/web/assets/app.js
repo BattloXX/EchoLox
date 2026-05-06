@@ -142,7 +142,7 @@ function normalizeName(name) {
 
 function generateVIs(name, type) {
   const n = normalizeName(name);
-  const p = 'ha_' + n;
+  const p = 'echolox_' + n;
   switch (type) {
     case 'switch': return [`${p}_on`, `${p}_off`];
     case 'dimmer': return [`${p}_on`, `${p}_off`, `${p}_brightness`];
