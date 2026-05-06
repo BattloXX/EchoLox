@@ -1,22 +1,22 @@
-﻿# EchoLox
+# EchoLox
 
-**LoxBerry Plugin** â€” emuliert eine Philips Hue Bridge, damit Amazon Alexa den Loxone Miniserver Ã¼ber Virtual Inputs steuern kann.
+**LoxBerry Plugin** -- emuliert eine Philips Hue Bridge, damit Amazon Alexa den Loxone Miniserver über Virtual Inputs steuern kann.
 
 ```
 Alexa
-  â”‚  Hue-API  (Port 8079)
-  â–¼
+  |  Hue-API  (Port 8079)
+  v
 EchoLox  (LoxBerry Plugin)
-  â”‚  HTTP GET  /dev/sps/io/{name}/{value}   (Basic Auth)
-  â”‚  oder UDP  {name}={value}\r\n
-  â–¼
+  |  HTTP GET  /dev/sps/io/{name}/{value}   (Basic Auth)
+  |  oder UDP  {name}={value}\r\n
+  v
 Loxone Miniserver
-  â”‚  Virtual Inputs â†’ Logik-BlÃ¶cke
-  â–¼
-Echte GerÃ¤te  (Lampen, RollÃ¤den, Szenen â€¦)
+  |  Virtual Inputs --> Logik-Blöcke
+  v
+Echte Geräte  (Lampen, Rolläden, Szenen ...)
 ```
 
-Loxone bleibt die einzige Automations-Zentrale. EchoLox ist ausschlieÃŸlich die BrÃ¼cke zwischen Alexa und Loxone.
+Loxone bleibt die einzige Automations-Zentrale. EchoLox ist ausschliesslich die Brücke zwischen Alexa und Loxone.
 
 ---
 
@@ -26,12 +26,12 @@ Loxone bleibt die einzige Automations-Zentrale. EchoLox ist ausschlieÃŸlich di
 - [Voraussetzungen](#voraussetzungen)
 - [Installation](#installation)
 - [Erste Schritte](#erste-schritte)
-- [GerÃ¤te anlegen](#gerÃ¤te-anlegen)
+- [Geräte anlegen](#geräte-anlegen)
 - [Virtual Inputs in Loxone einrichten](#virtual-inputs-in-loxone-einrichten)
 - [Alexa-Erkennung](#alexa-erkennung)
 - [Sprachbefehle](#sprachbefehle)
 - [Transports: HTTP, UDP, MQTT](#transports-http-udp-mqtt)
-- [Status-Ãœbersicht](#status-Ã¼bersicht)
+- [Status-Übersicht](#status-übersicht)
 - [Import alter Konfiguration](#import-alter-konfiguration)
 - [Einstellungen](#einstellungen)
 - [Konfigurationsdatei](#konfigurationsdatei)
@@ -46,26 +46,26 @@ Loxone bleibt die einzige Automations-Zentrale. EchoLox ist ausschlieÃŸlich di
 
 ### Das Problem
 
-Amazon Alexa kann nativ keine Loxone Virtual Inputs ansprechen. Die bisherige LÃ¶sung â€” ha-bridge (Java) â€” lief auf dem LoxBerry, verbrauchte aber 150â€“300 MB RAM und benÃ¶tigte eine JVM.
+Amazon Alexa kann nativ keine Loxone Virtual Inputs ansprechen. Die bisherige Lösung -- ha-bridge (Java) -- lief auf dem LoxBerry, verbrauchte aber 150-300 MB RAM und benötigte eine JVM.
 
-### Die LÃ¶sung
+### Die Lösung
 
 EchoLox ist ein kompletter Neubau in **Go**:
 
 | Kriterium | ha-bridge (Java) | EchoLox (Go) |
 |---|---|---|
-| RAM-Verbrauch | ~150â€“300 MB (JVM) | ~10â€“20 MB |
+| RAM-Verbrauch | ~150-300 MB (JVM) | ~10-20 MB |
 | Deployment | JAR + JRE | Einzelnes Binary, keine Deps |
-| Startup-Zeit | 3â€“8 Sekunden | < 100 ms |
+| Startup-Zeit | 3-8 Sekunden | < 100 ms |
 | ARM-Build | JRE muss installiert sein | `GOOS=linux GOARCH=arm64 go build` |
-| UnterstÃ¼tzte Ziele | Vera, Fibaro, HASS, LIFX, â€¦ | Nur Loxone (gezielt, schlank) |
+| Unterstützte Ziele | Vera, Fibaro, HASS, LIFX, ... | Nur Loxone (gezielt, schlank) |
 
 ### Funktionsprinzip
 
-Alexa erkennt EchoLox als echte Philips Hue Bridge (SSDP/UPnP-Discovery). Jedes GerÃ¤t, das du in EchoLox anlegst, erscheint in der Alexa-App als Hue-Lampe. Wenn du â€žAlexa, schalte Wohnzimmer Licht ein" sagst, sendet EchoLox einen HTTP-GET-Request an den Loxone Miniserver:
+Alexa erkennt EchoLox als echte Philips Hue Bridge (SSDP/UPnP-Discovery). Jedes Gerät, das du in EchoLox anlegst, erscheint in der Alexa-App als Hue-Lampe. Wenn du "Alexa, schalte Wohnzimmer Licht ein" sagst, sendet EchoLox einen HTTP-GET-Request an den Loxone Miniserver:
 
 ```
-GET http://192.168.1.7/dev/sps/io/ha_wohnzimmer_licht_on/1
+GET http://192.168.1.7/dev/sps/io/echolox_wohnzimmer_licht_on/1
 Authorization: Basic base64(user:password)
 ```
 
@@ -74,19 +74,19 @@ Authorization: Basic base64(user:password)
 ## Voraussetzungen
 
 - **LoxBerry** ab Version 2.0 (Raspberry Pi oder x86)
-- **Loxone Miniserver** (beliebige Generation) â€” im selben Netzwerk wie LoxBerry
-- **Amazon Echo** (beliebiges Modell) â€” im selben Netzwerk
-- Loxone Miniserver und Echo mÃ¼ssen im gleichen Subnetz liegen wie der LoxBerry (SSDP-Discovery funktioniert nicht Ã¼ber Router-Grenzen)
+- **Loxone Miniserver** (beliebige Generation) -- im selben Netzwerk wie LoxBerry
+- **Amazon Echo** (beliebiges Modell) -- im selben Netzwerk
+- Loxone Miniserver und Echo müssen im gleichen Subnetz liegen wie der LoxBerry (SSDP-Discovery funktioniert nicht über Router-Grenzen)
 
 ---
 
 ## Installation
 
-### Ãœber den LoxBerry Plugin Manager
+### Über den LoxBerry Plugin Manager
 
-1. Ã–ffne die LoxBerry Web-OberflÃ¤che â†’ **Plugin Manager**
+1. Öffne die LoxBerry Web-Oberfläche -> **Plugin Manager**
 2. Klicke auf **Plugin installieren**
-3. WÃ¤hle **Von URL installieren** und gib ein:
+3. Wähle **Von URL installieren** und gib ein:
    ```
    https://github.com/BattloXX/EchoLox/archive/refs/heads/main.zip
    ```
@@ -94,9 +94,9 @@ Authorization: Basic base64(user:password)
 4. Nach der Installation erscheint **EchoLox** in der LoxBerry Navigation
 5. Der Dienst startet automatisch auf Port **8079**
 
-### PrÃ¼fen ob der Dienst lÃ¤uft
+### Prüfen ob der Dienst läuft
 
-Ã–ffne im Browser:
+Öffne im Browser:
 ```
 http://<loxberry-ip>:8079/description.xml
 ```
@@ -106,82 +106,94 @@ Du solltest ein XML-Dokument mit `Philips hue bridge 2015` sehen. Wenn das klapp
 
 ## Erste Schritte
 
-### 1. Miniserver-Verbindung prÃ¼fen
+### 1. Miniserver-Verbindung prüfen
 
-Ã–ffne **EchoLox â†’ Einstellungen** (Ã¼ber die LoxBerry Navigation oder direkt `http://<loxberry-ip>:8079/ui/settings.html`).
+Öffne **EchoLox -> Einstellungen** (über die LoxBerry Navigation oder direkt `http://<loxberry-ip>:8079/ui/settings.html`).
 
 - Der Miniserver wird automatisch aus der **globalen LoxBerry-Konfiguration** gelesen (`/opt/loxberry/config/system/miniserver.json`). Du musst die IP und Credentials **nicht** erneut eingeben.
-- WÃ¤hle im Dropdown den gewÃ¼nschten Miniserver (relevant wenn mehrere konfiguriert sind).
-- Klicke **Verbindung testen** â€” du solltest â€žâœ… Verbindung OK" sehen.
+- Wähle im Dropdown den gewünschten Miniserver (relevant wenn mehrere konfiguriert sind).
+- Klicke **Verbindung testen** -- du solltest "Verbindung OK" sehen.
 
-### 2. Erstes GerÃ¤t anlegen
+### 2. Erstes Gerät anlegen
 
-Ã–ffne **EchoLox â†’ GerÃ¤te â†’ + Neu**.
+Öffne **EchoLox -> Geräte -> + Neu**.
 
 - **Name:** `Wohnzimmer Licht` (genau so, wie du es Alexa nennen wirst)
 - **Typ:** `Dimmer`
 - **Transport:** `HTTP`
 - Die generierten Virtual Input Namen werden sofort angezeigt, z.B.:
-  - `ha_wohnzimmer_licht_on`
-  - `ha_wohnzimmer_licht_brightness`
+  - `echolox_wohnzimmer_licht_on`
+  - `echolox_wohnzimmer_licht_off`
+  - `echolox_wohnzimmer_licht_brightness`
 
 Klicke **Speichern**.
 
 ### 3. Virtual Inputs im Loxone Config einrichten
 
-Ã–ffne Loxone Config und lege folgende Virtual Inputs an (Namen exakt wie oben):
+Öffne Loxone Config und lege folgende Virtual Inputs an (Namen exakt wie oben):
 
-- `ha_wohnzimmer_licht_on` â€” Typ: Virtual Input, Wert 0/1
-- `ha_wohnzimmer_licht_brightness` â€” Typ: Virtual Input, Wert 0â€“100
+- `echolox_wohnzimmer_licht_on` -- Typ: Virtual Input, Wert 0/1
+- `echolox_wohnzimmer_licht_off` -- Typ: Virtual Input, Wert 0/1
+- `echolox_wohnzimmer_licht_brightness` -- Typ: Virtual Input, Wert 0-100
 
-Verbinde sie mit deinen Logik-BlÃ¶cken und lade die Config auf den Miniserver.
+Verbinde sie mit deinen Logik-Blöcken und lade die Config auf den Miniserver.
 
-### 4. Alexa: Neue GerÃ¤te suchen
+### 4. Alexa: Neue Geräte suchen
 
-Sage: **â€žAlexa, suche nach neuen GerÃ¤ten"**  
-oder Ã¶ffne die Alexa-App â†’ GerÃ¤te â†’ + â†’ GerÃ¤t hinzufÃ¼gen â†’ Licht â†’ Philips Hue.
+Sage: **"Alexa, suche nach neuen Geräten"**  
+oder öffne die Alexa-App -> Geräte -> + -> Gerät hinzufügen -> Licht -> Philips Hue.
 
-Alexa findet die Bridge und alle angelegten GerÃ¤te. Danach kannst du sagen:  
-**â€žAlexa, schalte Wohnzimmer Licht ein"**
+Alexa findet die Bridge und alle angelegten Geräte. Danach kannst du sagen:  
+**"Alexa, schalte Wohnzimmer Licht ein"**
 
 ---
 
-## GerÃ¤te anlegen
+## Geräte anlegen
 
-### GerÃ¤tetypen
+### Gerätetypen
 
 | Typ | Alexa-Befehle | Generierte Virtual Inputs | Wertebereich |
 |---|---|---|---|
-| `switch` | Ein/Aus | `ha_{name}_on` | `1` / `0` |
-| `dimmer` | Ein/Aus, Helligkeit % | `ha_{name}_on`, `ha_{name}_brightness` | `1`/`0`, `0â€“100` |
-| `color` | Ein/Aus, Helligkeit, Farbe | `ha_{name}_on`, `ha_{name}_brightness`, `ha_{name}_hue`, `ha_{name}_saturation` | diverse |
-| `scene` | â€žAktiviere â€¦" | `ha_{name}_activate` | `1` (Puls) |
+| `switch` | Ein/Aus | `echolox_{name}_on`, `echolox_{name}_off` | `1` / `1` |
+| `dimmer` | Ein/Aus, Helligkeit % | `echolox_{name}_on`, `echolox_{name}_off`, `echolox_{name}_brightness` | `1`/`1`, `0-100` |
+| `color` | Ein/Aus, Helligkeit, Farbe | `echolox_{name}_on`, `echolox_{name}_off`, `echolox_{name}_brightness`, `echolox_{name}_hue`, `echolox_{name}_saturation` | diverse |
+| `scene` | "Aktiviere ..." | `echolox_{name}_activate` | `1` (Puls) |
+
+### Ein/Aus -- getrennte Virtual Inputs
+
+Jedes Gerät (ausser Szenen) hat separate VIs für Ein und Aus:
+
+| Alexa-Befehl | Gesendeter Virtual Input | Wert |
+|---|---|---|
+| "Wohnzimmer Licht an" | `echolox_wohnzimmer_licht_on` | `1` |
+| "Wohnzimmer Licht aus" | `echolox_wohnzimmer_licht_off` | `1` |
+| "Wohnzimmer Licht auf 60%" | `echolox_wohnzimmer_licht_brightness` | `60` |
 
 ### Namensnormalisierung
 
-Der GerÃ¤tename wird automatisch in einen Loxone-kompatiblen Virtual Input Namen umgewandelt:
+Der Gerätename wird automatisch in einen Loxone-kompatiblen Virtual Input Namen umgewandelt:
 
 | Eingabe | Normalisiert | VI-Prefix |
 |---|---|---|
-| `Wohnzimmer Licht` | `wohnzimmer_licht` | `ha_wohnzimmer_licht_` |
-| `KÃ¼che Decke` | `kueche_decke` | `ha_kueche_decke_` |
-| `Terrasse SÃ¼d` | `terrasse_sued` | `ha_terrasse_sued_` |
-| `Jalousie EG` | `jalousie_eg` | `ha_jalousie_eg_` |
+| `Wohnzimmer Licht` | `wohnzimmer_licht` | `echolox_wohnzimmer_licht_` |
+| `Küche Decke` | `kueche_decke` | `echolox_kueche_decke_` |
+| `Terrasse Süd` | `terrasse_sued` | `echolox_terrasse_sued_` |
+| `Jalousie EG` | `jalousie_eg` | `echolox_jalousie_eg_` |
 
-Regeln: Kleinbuchstaben, Umlaute â†’ ae/oe/ue/ss, Sonderzeichen â†’ Unterstrich.
+Regeln: Kleinbuchstaben, Umlaute -> ae/oe/ue/ss, Sonderzeichen -> Unterstrich.
 
-### Beispiel: Alexa sagt â€žWohnzimmer Licht auf 60 Prozent"
+### Beispiel: Alexa sagt "Wohnzimmer Licht auf 60 Prozent"
 
 ```
-Hue API â†’ PUT /api/{user}/lights/1/state
-          { "on": true, "bri": 153 }
+Hue API: PUT /api/{user}/lights/1/state
+         { "on": true, "bri": 153 }
 
 EchoLox sendet:
-  GET .../dev/sps/io/ha_wohnzimmer_licht_on/1
-  GET .../dev/sps/io/ha_wohnzimmer_licht_brightness/60
+  GET .../dev/sps/io/echolox_wohnzimmer_licht_on/1
+  GET .../dev/sps/io/echolox_wohnzimmer_licht_brightness/60
 ```
 
-Die Helligkeit wird von Hue-Skala (0â€“254) auf Prozent (0â€“100) umgerechnet.
+Die Helligkeit wird von Hue-Skala (0-254) auf Prozent (0-100) umgerechnet.
 
 ---
 
@@ -189,66 +201,58 @@ Die Helligkeit wird von Hue-Skala (0â€“254) auf Prozent (0â€“100) umge
 
 ### HTTP Virtual Input
 
-Im Loxone Config unter **Peripherie â†’ Virtual Inputs**:
+Im Loxone Config unter **Peripherie -> Virtual Inputs**:
 
 1. Neuen **Virtual HTTP Input** anlegen
-2. Name: exakt wie von EchoLox generiert (z.B. `ha_wohnzimmer_licht_on`)
+2. Name: exakt wie von EchoLox generiert (z.B. `echolox_wohnzimmer_licht_on`)
 3. HTTP-Methode: GET
-4. Der Virtual Input empfÃ¤ngt den Wert aus der URL: `/dev/sps/io/ha_wohnzimmer_licht_on/{value}`
+4. Der Virtual Input empfängt den Wert aus der URL: `/dev/sps/io/echolox_wohnzimmer_licht_on/{value}`
 
 ### UDP Virtual Input (alternativ)
 
 1. Neuen **Virtual UDP Input** anlegen
 2. Port: `7777` (Standard, in EchoLox einstellbar)
-3. Format: `{name}={value}` (EchoLox sendet `ha_wohnzimmer_licht_on=1\r\n`)
+3. Format: `{name}={value}` (EchoLox sendet `echolox_wohnzimmer_licht_on=1\r\n`)
 
 ### Empfehlung
 
 | Szenario | Transport |
 |---|---|
-| ZuverlÃ¤ssigkeit wichtig | **HTTP** â€” Antwort-BestÃ¤tigung, Basic Auth |
-| Latenz wichtig (< 5 ms) | **UDP** â€” keine TCP-Verbindung |
+| Zuverlässigkeit wichtig | **HTTP** -- Antwort-Bestätigung, Basic Auth |
+| Latenz wichtig (< 5 ms) | **UDP** -- keine TCP-Verbindung |
 | Bereits MQTT Gateway im Einsatz | **MQTT** |
 
 ---
 
 ## Alexa-Erkennung
 
-EchoLox emuliert eine Philips Hue Bridge Generation 2 (BSB002). Die Erkennung lÃ¤uft Ã¼ber **SSDP/UPnP**:
+EchoLox emuliert eine Philips Hue Bridge Generation 2 (BSB002). Die Erkennung läuft über **SSDP/UPnP**:
 
 1. Alexa sendet einen `M-SEARCH`-Broadcast ins Netzwerk (UDP Multicast `239.255.255.250:1900`)
 2. EchoLox antwortet mit einer `HTTP/1.1 200 OK`-Unicast-Antwort
-3. Alexa lÃ¤dt `/description.xml` und bestÃ¤tigt die Bridge-IdentitÃ¤t
-4. Alexa ruft `/api/{user}/lights` ab und importiert alle GerÃ¤te
+3. Alexa ruft `http://<loxberry-ip>:8079/description.xml` ab
+4. Alexa verbindet sich mit der Hue-API und liest alle Geräte
 
-### Wichtig fÃ¼r die Erkennung
+### Bridge-Identität
 
-- LoxBerry und Echo mÃ¼ssen im **gleichen Subnetz** sein
-- Port **8079** muss auf dem LoxBerry erreichbar sein (kein Firewall-Block)
-- Die Bridge-ID bleibt **dauerhaft stabil** (aus der IP abgeleitet) â€” Alexa verliert die Bridge nicht nach einem Neustart
-
-### Erkennung wiederholen
-
-Wenn neue GerÃ¤te hinzugefÃ¼gt wurden:
-- Alexa-App â†’ **GerÃ¤te â†’ Erkennen**
-- oder: â€ž**Alexa, suche nach neuen GerÃ¤ten**"
+Die Bridge-UUID und Bridge-ID werden deterministisch aus der IP-Adresse des LoxBerry abgeleitet. Das bedeutet:
+- Die Identität bleibt bei jedem Neustart gleich
+- Alexa verliert die Bridge nicht nach einem Reboot
+- Kein manuelles Pairing nötig
 
 ---
 
 ## Sprachbefehle
 
-| Befehl | Aktion | Gesendeter Virtual Input |
-|---|---|---|
-| â€žSchalte X ein" | on=1 | `ha_x_on = 1` |
-| â€žSchalte X aus" | on=0 | `ha_x_on = 0` |
-| â€žStelle X auf 50 Prozent" | bri=50% | `ha_x_on = 1`, `ha_x_brightness = 50` |
-| â€žDimme X auf 20 Prozent" | bri=20% | `ha_x_brightness = 20` |
-| â€žStelle X auf Rot" | hue+sat | `ha_x_hue = 0`, `ha_x_saturation = 100` |
-| â€žAktiviere Szene Y" | activate=1 | `ha_y_activate = 1` |
+| Befehl | Aktion |
+|---|---|
+| "Alexa, schalte [Name] ein" | `{name}_on = 1` |
+| "Alexa, schalte [Name] aus" | `{name}_off = 1` |
+| "Alexa, dimme [Name] auf 50 Prozent" | `{name}_brightness = 50` |
+| "Alexa, stelle [Name] auf rot" | `{name}_hue = 0`, `{name}_saturation = 100` |
+| "Alexa, aktiviere [Szenenname]" | `{name}_activate = 1` |
 
-### Tipp: Alexa-Gruppen
-
-Fasse mehrere GerÃ¤te in der **Alexa-App zu einer Gruppe** zusammen (z.B. â€žWohnzimmer"). Dann funktioniert â€žAlexa, schalte Wohnzimmer aus" fÃ¼r alle GerÃ¤te der Gruppe gleichzeitig.
+**Wichtig:** Der Gerätename in EchoLox muss exakt so lauten, wie du ihn Alexa sagst.
 
 ---
 
@@ -257,128 +261,83 @@ Fasse mehrere GerÃ¤te in der **Alexa-App zu einer Gruppe** zusammen (z.B. â�
 ### HTTP (Standard)
 
 ```
-GET http://{miniserver-ip}:{port}/dev/sps/io/{vi-name}/{value}
-Authorization: Basic base64(user:password)
+GET http://<miniserver-ip>:<port>/dev/sps/io/<name>/<value>
+Authorization: Basic base64(<user>:<password>)
 ```
 
-- BestÃ¤tigung durch HTTP-Statuscode (200 = OK, 401 = falsche Credentials)
-- Credentials aus der globalen LoxBerry Miniserver-Konfiguration
+Credentials und IP werden aus der globalen LoxBerry-Konfiguration gelesen.
 
 ### UDP
 
+EchoLox sendet UDP-Pakete an den Miniserver:
 ```
-{vi-name}={value}\r\n
+echolox_wohnzimmer_licht_on=1\r\n
 ```
+Port einstellbar (Standard: 7777). Kein Handshake, keine Bestätigung -- sehr geringe Latenz.
 
-Ziel: `{miniserver-ip}:{udp-port}` (Standard: 7777)
+### MQTT
 
-- Kein Verbindungsaufbau, geringste Latenz
-- Kein Fehler-Feedback mÃ¶glich
-
-### MQTT (Ã¼ber LoxBerry MQTT Gateway)
-
-EchoLox published auf:
-```
-Topic:   ha_bridge/{device_name}/{property}
-Payload: {value}
-```
-
-Das LoxBerry MQTT Gateway leitet die Nachrichten an den Miniserver weiter. EchoLox registriert beim Speichern eines GerÃ¤ts automatisch die nÃ¶tigen Subscriptions in der MQTT-Gateway-Konfiguration.
+EchoLox publisht auf `loxone/{name}` mit dem Wert als Payload. Broker-URL in den Einstellungen konfigurierbar.
 
 ---
 
-## Status-Ãœbersicht
+## Status-Übersicht
 
-Die Status-Seite (`/ui/status.html`) zeigt alle Virtual Inputs mit ihrem aktuellen Zustand â€” Ã¤hnlich der MQTT-Gateway â€žIncoming Overview".
+Die Status-Seite (`/ui/status.html`) zeigt für jeden Virtual Input:
 
-| Icon | Status | Bedeutung |
-|---|---|---|
-| âœ… | ok | Virtual Input existiert im Miniserver und wurde zuletzt erfolgreich angesprochen |
-| ðŸŸ  | not_found | Name im Miniserver nicht gefunden â€” Virtual Input noch nicht angelegt |
-| ðŸ”´ | access_denied | Falsche Credentials fÃ¼r den Miniserver |
-| â¬œ | not_sent | GerÃ¤t noch nie ausgelÃ¶st |
-
-```
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚ Loxone Virtual Input Name            â”‚ Letzter Wert â”‚ Zuletzt gesendetâ”‚
-â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
-â”‚ âœ… ha_wohnzimmer_licht_on            â”‚ 1            â”‚ 05.05. 22:14:03 â”‚
-â”‚ âœ… ha_wohnzimmer_licht_brightness    â”‚ 60           â”‚ 05.05. 22:14:03 â”‚
-â”‚ ðŸŸ  ha_schlafzimmer_decke_on          â”‚ â€”            â”‚ nie             â”‚
-â”‚ â¬œ ha_terrasse_szene_activate        â”‚ â€”            â”‚ nie             â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-```
-
-Ãœber **Refresh** wird die Loxone-Struktur (`LoxAPP3.json`) neu abgefragt.
+| Status | Bedeutung |
+|---|---|
+| `ok` | Letzter Send war erfolgreich, VI im Miniserver gefunden |
+| `not_found` | VI im Miniserver nicht gefunden -- Name prüfen |
+| `access_denied` | Credentials falsch -- Passwort prüfen |
+| `not_sent` | Noch kein Befehl gesendet seit Start |
 
 ---
 
 ## Import alter Konfiguration
 
-Wer bisher ha-bridge verwendet hat, kann die bestehende `devices.db` importieren.
+Falls du von ha-bridge migrierst, kannst du deine `devices.db` importieren:
 
-### Web-UI Import
+1. Öffne **EchoLox -> Import**
+2. Lade die `devices.db` hoch (Drag & Drop oder Datei wählen)
+3. EchoLox zeigt eine Vorschau der importierten Geräte
+4. Klicke **Importieren**
 
-1. Ã–ffne **EchoLox â†’ Import**
-2. Lade die `devices.db` hoch (Drag & Drop)
-3. EchoLox zeigt eine Vorschau:
-   - Erkannte GerÃ¤te mit generierten Virtual Input Namen
-   - Ãœbersprungene GerÃ¤te (Vera, Fibaro, Harmony, â€¦ â€” diese Plattformen werden nicht mehr unterstÃ¼tzt)
-4. Namen kÃ¶nnen manuell angepasst werden
-5. Klicke **Importieren**
-
-### Mapping-Logik
-
-| Alter Typ | Neues Device | Hinweis |
-|---|---|---|
-| `httpDevice` (on/off URL) | `switch` | Virtual Input: `_on` |
-| `httpDevice` (mit dimUrl) | `dimmer` | Virtual Inputs: `_on`, `_brightness` |
-| `httpDevice` (mit colorUrl) | `color` | Virtual Inputs: `_on`, `_brightness`, `_hue`, `_saturation` |
-| `execDevice` | `switch` | Exec-Logik entfÃ¤llt |
-| `veraDevice` | â€” | Ãœbersprungen âš ï¸ |
-| `harmonyDevice` | â€” | Ãœbersprungen âš ï¸ |
-| alle anderen Plattform-Typen | â€” | Ãœbersprungen âš ï¸ |
-
-### CLI-Import (alternativ)
-
-```bash
-EchoLox --import /pfad/zur/devices.db --import-out /opt/loxberry/data/plugins/EchoLox/devices.json
-```
+**Hinweis:** Die generierten Virtual Input Namen ändern sich durch den Import (Prefix `echolox_` statt `ha_`). Die Virtual Inputs im Loxone Config müssen entsprechend angepasst werden.
 
 ---
 
 ## Einstellungen
 
-Alle Einstellungen sind Ã¼ber die Web-UI unter `/ui/settings.html` zugÃ¤nglich.
+Öffne **EchoLox -> Einstellungen** (`/ui/settings.html`).
 
 | Einstellung | Standard | Beschreibung |
 |---|---|---|
-| **Miniserver** | Erster in LoxBerry | Dropdown aus globaler LoxBerry-Konfiguration |
-| **Transport** | HTTP | HTTP, UDP oder MQTT |
-| **UDP Port** | 7777 | Ziel-Port fÃ¼r UDP-Transport |
+| **Miniserver** | (aus LoxBerry) | Welcher Miniserver verwendet wird |
+| **Transport** | HTTP | Übertragungsprotokoll |
+| **UDP Port** | 7777 | Port für UDP-Transport |
 | **EchoLox Port** | 8079 | Port auf dem EchoLox lauscht |
-| **MQTT Broker** | tcp://localhost:1883 | Nur relevant bei MQTT-Transport |
+| **MQTT Broker** | tcp://localhost:1883 | MQTT Broker URL |
 
-> **Hinweis:** Miniserver-IP, Benutzername und Passwort werden **ausschlieÃŸlich** aus der globalen LoxBerry-Konfiguration (`/opt/loxberry/config/system/miniserver.json`) gelesen. Du musst sie nicht erneut eingeben.
+Einstellungen werden direkt in `EchoLox.cfg` gespeichert. Portänderungen erfordern einen Neustart von EchoLox.
 
 ---
 
 ## Konfigurationsdatei
 
-```yaml
-# /opt/loxberry/config/plugins/EchoLox/EchoLox.cfg
+Die Konfiguration liegt unter `/opt/loxberry/config/plugins/EchoLox/EchoLox.cfg`:
 
+```yaml
 server:
   port: 8079    # Port auf dem EchoLox lauscht
-  ip: ""        # Leer = automatisch erkannt (empfohlen)
+  ip: ""        # leer = automatisch erkannt
 
 upnp:
   name: "EchoLox"
-  uuid: ""      # Leer = aus IP abgeleitet (stabil Ã¼ber Neustarts)
 
 loxone:
-  miniserver: "1"     # ID aus LoxBerry miniserver.json
-  transport: "http"   # http | udp | mqtt
+  miniserver: "1"      # Miniserver-ID aus LoxBerry-Konfiguration
+  transport: "http"    # http, udp oder mqtt
   udp_port: 7777
 
 mqtt:
@@ -386,102 +345,91 @@ mqtt:
   username: ""
   password: ""
 
-data_dir: ""    # Leer = $LBPDATA (automatisch durch LoxBerry gesetzt)
+data_dir: ""    # leer = Standard-LoxBerry-Datenpfad
 ```
 
-Die GerÃ¤te werden gespeichert in:
-```
-/opt/loxberry/data/plugins/EchoLox/devices.json
-```
+Die Miniserver-IP und Credentials werden automatisch aus `/opt/loxberry/config/system/miniserver.json` gelesen.
 
 ---
 
 ## Technische Architektur
 
-### Projektstruktur
-
 ```
-EchoLox/
-â”œâ”€â”€ cmd/EchoLox/
-â”‚   â””â”€â”€ main.go                    # Entry Point, Flag-Parsing
-â”œâ”€â”€ internal/
-â”‚   â”œâ”€â”€ identity/
-â”‚   â”‚   â””â”€â”€ identity.go            # Bridge-IdentitÃ¤t (UUID, bridgeid, MAC)
-â”‚   â”œâ”€â”€ bridge/
-â”‚   â”‚   â”œâ”€â”€ bridge.go              # HTTP-Server Init, Komponentenverbindung
-â”‚   â”‚   â””â”€â”€ config.go              # YAML-Config, LoxBerry Env-Vars
-â”‚   â”œâ”€â”€ hue/
-â”‚   â”‚   â”œâ”€â”€ api.go                 # Hue REST Endpoints (lights, groups, config)
-â”‚   â”‚   â””â”€â”€ state.go               # Brightness/Hue/Sat Konvertierung
-â”‚   â”œâ”€â”€ upnp/
-â”‚   â”‚   â””â”€â”€ listener.go            # SSDP Multicast-Listener + description.xml
-â”‚   â”œâ”€â”€ device/
-â”‚   â”‚   â”œâ”€â”€ manager.go             # Device-Registry (CRUD, State, HueID)
-â”‚   â”‚   â”œâ”€â”€ store.go               # JSON-Persistenz (atomic write)
-â”‚   â”‚   â”œâ”€â”€ model.go               # Device/State Typen
-â”‚   â”‚   â””â”€â”€ naming.go              # Auto-Namens-Generierung
-â”‚   â”œâ”€â”€ loxone/
-â”‚   â”‚   â”œâ”€â”€ client.go              # HTTP + UDP Transport
-â”‚   â”‚   â”œâ”€â”€ verify.go              # LoxAPP3.json Abfrage, Status-Check
-â”‚   â”‚   â”œâ”€â”€ lbconfig.go            # LoxBerry Miniserver-Config lesen
-â”‚   â”‚   â””â”€â”€ mqttbridge.go          # MQTT-Gateway Auto-Registrierung
-â”‚   â”œâ”€â”€ api/
-â”‚   â”‚   â””â”€â”€ handler.go             # Management REST API (/echolox/api/...)
-â”‚   â”œâ”€â”€ migrate/
-â”‚   â”‚   â””â”€â”€ importer.go            # devices.db â†’ neues Format
-â”‚   â””â”€â”€ web/
-â”‚       â””â”€â”€ handler.go             # Embedded Web-UI Handler
-â””â”€â”€ webembed/
-    â””â”€â”€ web/                       # Eingebettetes Frontend (embed.FS)
-        â”œâ”€â”€ index.html             # GerÃ¤teÃ¼bersicht
-        â”œâ”€â”€ device.html            # Anlegen / Bearbeiten
-        â”œâ”€â”€ status.html            # Virtual Input Status
-        â”œâ”€â”€ settings.html          # Einstellungen
-        â”œâ”€â”€ import.html            # Import
-        â””â”€â”€ assets/
-            â”œâ”€â”€ app.js
-            â””â”€â”€ style.css
+cmd/EchoLox/
+    main.go                    # Entry point, CLI flags
+
+internal/
+    bridge/
+        bridge.go              # HTTP-Server, Startup-Logik
+        config.go              # YAML-Konfiguration
+    hue/
+        api.go                 # Philips Hue REST API v1.47.0
+        state.go               # Brightness/Hue/Sat Konvertierung
+    upnp/
+        listener.go            # SSDP Multicast-Listener + description.xml
+    device/
+        model.go               # Device-Struct mit HueID
+        manager.go             # CRUD, Persistenz, HueID-Vergabe
+        naming.go              # Namensnormalisierung, VI-Generierung
+        store.go               # JSON-Datei-Backend
+    loxone/
+        client.go              # HTTP/UDP/MQTT Send
+        lbconfig.go            # LoxBerry miniserver.json lesen
+        verify.go              # VI-Status prüfen
+        mqttbridge.go          # MQTT-Transport
+    api/
+        handler.go             # REST API /echolox/api/*
+    web/
+        handler.go             # Statische Web-UI
+    identity/
+        identity.go            # Stabile Bridge-UUID aus IP
+    migrate/
+        importer.go            # ha-bridge devices.db Import
+
+webembed/
+    web/                       # Embedded Web-UI (Go embed.FS)
+        index.html             # Geräteliste
+        device.html            # Gerät anlegen/bearbeiten
+        status.html            # VI-Status
+        settings.html          # Einstellungen
+        import.html            # Import
+        about.html             # About / GitHub
+        assets/
+            app.js
+            style.css
+            logo.png
 ```
-
-### Bridge-IdentitÃ¤t
-
-Die Bridge-ID (hue-bridgeid) und UUID werden **deterministisch aus der IP-Adresse** abgeleitet:
-
-```
-IP: 192.168.1.100
- â†’ MD5("echolox-bridge:192.168.1.100")
- â†’ suffix = 12 Hex-Zeichen
- â†’ UUID    = 2f402f80-da50-11e1-9b23-{suffix}
- â†’ bridgeid = 001788FFFE{suffix[6:]}  (Philips OUI + FFFE + 6 Hex)
-```
-
-Das bedeutet: Nach einem Neustart behÃ¤lt EchoLox dieselbe IdentitÃ¤t â€” Alexa verliert die Bridge nicht.
 
 ### SSDP-Flow (Alexa-Erkennung)
 
 ```
-Echo                          EchoLox
- â”‚                                â”‚
- â”‚â”€â”€ M-SEARCH (UDP Multicast) â”€â”€â”€â–¶â”‚  Port 1900
- â”‚                                â”‚  isMSearch() prÃ¼ft ST-Header
- â”‚â—€â”€â”€ HTTP/1.1 200 OK (Unicast) â”€â”€â”‚  eigener ephemerer UDP-Socket
- â”‚    LOCATION: .../description.xml
- â”‚    USN: uuid:...::urn:...:Basic:1
- â”‚    hue-bridgeid: 001788FFFE...
- â”‚                                â”‚
- â”‚â”€â”€ GET /description.xml â”€â”€â”€â”€â”€â”€â”€â”€â–¶â”‚
- â”‚â—€â”€â”€ XML (serialNumber=bridgeid) â”€â”‚
- â”‚                                â”‚
- â”‚â”€â”€ POST /api (Pairing) â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¶â”‚
- â”‚â—€â”€â”€ [{"success":{"username":...}}]
- â”‚                                â”‚
- â”‚â”€â”€ GET /api/{user}/lights â”€â”€â”€â”€â”€â”€â–¶â”‚
- â”‚â—€â”€â”€ {"1": {...}, "2": {...}}  â”€â”€â”€â”‚
+Echo Device                    EchoLox (Port 1900 UDP)
+    |-- M-SEARCH (UDP Multicast) -->|
+    |<-- HTTP/1.1 200 OK (Unicast) -|
+    |     LOCATION: http://<ip>:8079/description.xml
+    |
+    |-- GET /description.xml ------>|
+    |<-- XML (Philips Hue Bridge) --|
+    |
+    |-- POST /api (pairing) ------->|
+    |<-- {"success":{"username":..}}|
+    |
+    |-- GET /api/{user}/lights ----->|
+    |<-- { "1": {...}, "2": {...} } -|
 ```
 
-### Hue Light IDs
+### Hue API (implementierte Endpunkte)
 
-Intern werden GerÃ¤te mit UUIDs gespeichert. FÃ¼r die Hue API wird jedes GerÃ¤t einer stabilen, kurzen numerischen ID (`HueID`) zugewiesen â€” diese wird beim ersten Anlegen vergeben und dann permanent in der `devices.json` gespeichert.
+```
+GET  /description.xml
+POST /api                          Pairing (immer erfolgreich)
+GET  /api/{user}/lights            Alle Geräte
+GET  /api/{user}/lights/{id}       Einzelnes Gerät
+PUT  /api/{user}/lights/{id}/state Zustand setzen (on, bri, hue, sat)
+GET  /api/{user}/groups            Gruppen (Group 0 = alle)
+GET  /api/{user}/config            Bridge-Konfiguration
+GET  /api/{user}/datastore         Vollständiger Datastore
+```
 
 ---
 
@@ -489,48 +437,31 @@ Intern werden GerÃ¤te mit UUIDs gespeichert. FÃ¼r die Hue API wird jedes Ger
 
 ### Voraussetzungen
 
-- Go 1.22 oder neuer
-- Internet (fÃ¼r `go mod download`)
+- Go 1.21+
+
+### Lokaler Build
+
+```bash
+go build ./cmd/echolox/
+./echolox --config ./config/EchoLox.cfg
+```
+
+EchoLox startet und ist unter `http://localhost:8079/ui/` erreichbar. Ohne Miniserver-Konfiguration läuft alles im Dry-Run-Modus (Virtual Inputs werden nur geloggt, nicht gesendet).
 
 ### Alle Plattformen bauen
 
 ```bash
-make all
+GOOS=linux GOARCH=arm64 go build -o bin/EchoLox-arm64 ./cmd/echolox/
+GOOS=linux GOARCH=arm GOARM=7 go build -o bin/EchoLox-armv7 ./cmd/echolox/
+GOOS=linux GOARCH=amd64 go build -o bin/EchoLox-amd64 ./cmd/echolox/
 ```
 
-Erzeugt:
-- `bin/EchoLox-arm64` â€” Raspberry Pi 4, Orange Pi, Pine64
-- `bin/EchoLox-armv7` â€” Raspberry Pi 2/3 (32-bit ARM)
-- `bin/EchoLox-amd64` â€” DietPi x86, VirtualBox VM
-
-### Einzelne Plattform
+### Icons generieren
 
 ```bash
-# arm64
-GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o bin/EchoLox-arm64 ./cmd/EchoLox
-
-# armv7
-GOOS=linux GOARCH=arm GOARM=7 go build -ldflags="-s -w" -o bin/EchoLox-armv7 ./cmd/EchoLox
-
-# amd64
-GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/EchoLox-amd64 ./cmd/EchoLox
+cd tools/genicons
+go run main.go ../../icons
 ```
-
-### Lokal entwickeln (ohne LoxBerry)
-
-```bash
-go run ./cmd/EchoLox --config config/EchoLox.cfg
-```
-
-EchoLox startet und ist unter `http://localhost:8079/ui/` erreichbar. Ohne Miniserver-Konfiguration lÃ¤uft alles im Dry-Run-Modus (Virtual Inputs werden nur geloggt, nicht gesendet).
-
-### Plugin-ZIP erstellen
-
-```bash
-make zip
-```
-
-Erzeugt `EchoLox-1.0.0.zip` â€” direkt in den LoxBerry Plugin Manager hochladbar.
 
 ---
 
@@ -538,23 +469,22 @@ Erzeugt `EchoLox-1.0.0.zip` â€” direkt in den LoxBerry Plugin Manager hochl
 
 ### Alexa findet die Bridge nicht
 
-**PrÃ¼fpunkte:**
+**Prüfpunkte:**
 
 1. **description.xml erreichbar?**
    ```
    http://<loxberry-ip>:8079/description.xml
    ```
-   Muss ein XML mit `Philips hue bridge 2015` zurÃ¼ckgeben.
+   Muss ein XML mit `Philips hue bridge 2015` zurückgeben.
 
 2. **Port 8079 offen?**
    ```bash
-   # Auf dem LoxBerry:
    ss -tulnp | grep 8079
    ```
 
-3. **Gleicher Subnetz?** Echo und LoxBerry mÃ¼ssen im selben Subnetz sein. SSDP-Broadcasts werden nicht Ã¼ber Router-Grenzen weitergeleitet.
+3. **Gleicher Subnetz?** Echo und LoxBerry müssen im selben Subnetz sein. SSDP-Broadcasts werden nicht über Router-Grenzen weitergeleitet.
 
-4. **SSDP-Listener lÃ¤uft?** Im LoxBerry Log prÃ¼fen:
+4. **SSDP-Listener läuft?** Im LoxBerry Log prüfen:
    ```
    SSDP listener on 239.255.255.250:1900  bridgeid=001788FFFE...
    ```
@@ -566,80 +496,91 @@ Erzeugt `EchoLox-1.0.0.zip` â€” direkt in den LoxBerry Plugin Manager hochl
 
 6. **SSDP-Konflikt auf LoxBerry?** LoxBerry und der Loxone Miniserver nutzen selbst SSDP/UPnP (Port 1900 UDP). Wenn ein anderer Dienst Port 1900 exklusiv belegt, kann EchoLox den SSDP-Listener nicht starten:
    ```bash
-   # Prüfen ob Port 1900 belegt ist:
    ss -ulnp | grep 1900
    ```
-   Falls ein Konflikt besteht (z.B. `avahi-daemon`, `miniupnpd` oder ein anderes Plugin), diesen Dienst stoppen:
+   Falls ein Konflikt besteht (z.B. `avahi-daemon`, `miniupnpd`):
    ```bash
    systemctl stop avahi-daemon
    systemctl disable avahi-daemon
    ```
-   EchoLox benötigt Zugriff auf den UDP-Multicast-Port 1900, um SSDP-M-SEARCH-Anfragen von Alexa empfangen zu können. Ohne funktionierende SSDP-Discovery findet Alexa die Bridge nicht automatisch — die manuelle Geräteerkennung (`description.xml` direkt aufrufen) funktioniert aber weiterhin.
 
+### Alexa erkennt Geräte, aber Befehle kommen nicht an
 
-### Alexa erkennt GerÃ¤te, aber Befehle kommen nicht an
+1. **Testen-Button** in EchoLox -> Geräteliste -> Testen: Sendet einen Testbefehl direkt an den Miniserver.
 
-1. **Testen-Button** in EchoLox â†’ GerÃ¤teliste â†’ Testen: Sendet einen Testbefehl direkt an den Miniserver.
+2. **Status-Seite** prüfen: Zeigt `not_found`?  
+   -> Virtual Input im Loxone Config anlegen, Namen exakt prüfen.
 
-2. **Status-Seite** prÃ¼fen: Zeigt `not_found`?  
-   â†’ Virtual Input im Loxone Config anlegen, Namen exakt prÃ¼fen.
+3. **Loxone Log** prüfen: Kommen HTTP-Requests beim Miniserver an?
 
-3. **Loxone Log** prÃ¼fen: Kommen HTTP-Requests beim Miniserver an?
-
-4. **Credentials** prÃ¼fen: LoxBerry Miniserver-Konfiguration â†’ Verbindungstest in EchoLox Einstellungen.
+4. **Credentials** prüfen: LoxBerry Miniserver-Konfiguration -> Verbindungstest in EchoLox Einstellungen.
 
 ### Virtual Input Name stimmt nicht
 
-Der Name in Loxone Config muss **exakt** dem generierten Namen entsprechen (GroÃŸ-/Kleinschreibung beachtet, kein Leerzeichen).
+Der Name in Loxone Config muss **exakt** dem generierten Namen entsprechen (Gross-/Kleinschreibung beachtet, kein Leerzeichen).
 
-Beispiel: GerÃ¤t heiÃŸt `Wohnzimmer Licht` â†’ Virtual Input muss heiÃŸen `ha_wohnzimmer_licht_on`.
+Beispiel:
+```
+Gerätename in EchoLox:   "Wohnzimmer Licht"
+Generierter VI-Name:     "echolox_wohnzimmer_licht_on"
+                         "echolox_wohnzimmer_licht_off"
+```
 
-### Nach Neustart verliert Alexa die GerÃ¤te
+### EchoLox startet nicht
 
-Das sollte nicht passieren â€” die Bridge-ID ist deterministisch aus der IP abgeleitet. Falls die LoxBerry-IP sich geÃ¤ndert hat, Ã¤ndert sich auch die Bridge-ID. LÃ¶sung: Feste IP fÃ¼r den LoxBerry vergeben (DHCP-Reservation im Router).
+```bash
+# Status prüfen
+systemctl status echolox.service
 
-### Import schlÃ¤gt fehl
+# Log anzeigen
+journalctl -u echolox.service -n 50
 
-- Nur `devices.db` aus ha-bridge wird unterstÃ¼tzt (JSON-Array-Format)
-- Plattform-spezifische GerÃ¤te (Vera, Fibaro, Harmony, â€¦) werden Ã¼bersprungen â€” das ist erwartet
-- Bei kaputtem JSON: Datei in einem Editor Ã¶ffnen und auf GÃ¼ltigkeit prÃ¼fen
+# Manuell starten (Debug)
+LBHOMEDIR=/opt/loxberry \
+  /opt/loxberry/bin/plugins/EchoLox/EchoLox \
+  --config /opt/loxberry/config/plugins/EchoLox/EchoLox.cfg
+```
+
+### Miniserver wird nicht gefunden
+
+EchoLox liest die Miniserver-Konfiguration aus:
+```
+/opt/loxberry/config/system/miniserver.json
+```
+
+Falls die Datei fehlt oder leer ist, muss zuerst ein Miniserver in der LoxBerry-Konfiguration hinterlegt werden.
 
 ---
 
 ## FAQ
 
-**Kann EchoLox mehrere Loxone Miniserver gleichzeitig ansprechen?**  
-Nein â€” aktuell wird pro Transport ein Miniserver unterstÃ¼tzt. Mehrere Miniserver sind geplant.
+**Kann ich mehrere Echo-Geräte verwenden?**  
+Ja. Alle Echos im gleichen Netzwerk finden die Bridge automatisch.
 
-**Muss ich den Hue-Link-Button drÃ¼cken?**  
-Nein â€” EchoLox akzeptiert alle Pairing-Anfragen automatisch.
+**Was passiert wenn EchoLox nicht läuft?**  
+Alexa meldet "Gerät nicht erreichbar". Loxone selbst läuft unabhängig weiter.
 
-**Funktioniert EchoLox auch mit Google Home oder Apple HomeKit?**  
-Google Home unterstÃ¼tzt die Hue-Emulation ebenfalls, ist aber nicht primÃ¤r getestet. Apple HomeKit nutzt ein anderes Protokoll (HomeKit Accessory Protocol) und wird nicht unterstÃ¼tzt.
+**Kann ich EchoLox ohne LoxBerry verwenden?**  
+Ja, als Standalone-Binary. Miniserver-Credentials manuell in `EchoLox.cfg` eintragen.
 
-**Kann ich bestehende Alexa-Routinen behalten?**  
-Ja â€” solange die GerÃ¤tenamen gleich bleiben und die Bridge-ID stabil ist (was sie ist, solange die LoxBerry-IP gleich bleibt), funktionieren alle Routinen weiterhin.
+**Wird HTTPS unterstützt?**  
+Nein. Die Hue-API funktioniert nur über HTTP (wie die echte Bridge). Nur über VPN oder wenn Port 8079 im Router weitergeleitet wird.
 
-**Wie viele GerÃ¤te sind mÃ¶glich?**  
-Die Hue API unterstÃ¼tzt bis zu 50 Lampen. EchoLox hat keine eigene Begrenzung.
+**Wie viele Geräte werden unterstützt?**  
+Theoretisch unbegrenzt. Alexa hat ein Limit von ca. 300 Hue-Lampen pro Bridge.
 
-**Funktioniert EchoLox ohne Internet?**  
-VollstÃ¤ndig â€” SSDP-Discovery und Hue-API laufen rein lokal. Keine Cloud-Verbindung nÃ¶tig.
+**Alexa hat die Geräte gefunden, aber nach einem EchoLox-Neustart sind sie weg?**  
+Die Bridge-UUID wird aus der IP-Adresse des LoxBerry berechnet und bleibt stabil. Geräte sollten erhalten bleiben. Falls nicht: "Alexa, suche nach neuen Geräten" nochmal ausführen.
 
-**Kann ich die Web-UI von auÃŸerhalb des LANs erreichen?**  
-Nur Ã¼ber VPN oder wenn Port 8079 im Router weitergeleitet wird (nicht empfohlen â€” kein HTTPS, keine Authentifizierung).
-
----
-
-## Lizenz
-
-MIT License â€” siehe [LICENSE](LICENSE)
+**Was bedeutet der Virtual Input Prefix `echolox_`?**  
+Alle von EchoLox generierten Virtual Inputs beginnen mit `echolox_` um Kollisionen mit anderen Plugins zu vermeiden. Der Prefix kann nicht geändert werden.
 
 ---
 
-## Credits
+## Sicherheit
 
-Basiert auf den Ideen von [ha-bridge](https://github.com/bwssystems/ha-bridge) von bwssystems.  
-Neu entwickelt in Go als schlankes LoxBerry-Plugin.
+Nur über VPN oder wenn Port 8079 im Router weitergeleitet wird (nicht empfohlen -- kein HTTPS, keine Authentifizierung). Im lokalen Netzwerk ist EchoLox vollständig offline-fähig -- keine Cloud-Verbindung nötig.
 
-Maintainer: Johannes Battlogg â€” johannes@battlogg.org
+---
+
+*EchoLox -- [github.com/BattloXX/EchoLox](https://github.com/BattloXX/EchoLox)*

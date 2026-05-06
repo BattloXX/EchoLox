@@ -11,47 +11,75 @@ case "$ARCH" in
 esac
 chmod +x "$BINDIR/EchoLox"
 
-# Install daemon init script
+# Resolve actual home dir at install time so generated scripts work without env
+LBHOME="${LBHOMEDIR:-/opt/loxberry}"
+
+# ── LoxBerry daemon init script ────────────────────────────────────────────
 mkdir -p "$DAEMONDIR"
-cat > "$DAEMONDIR/EchoLox" << 'EOF'
+cat > "$DAEMONDIR/EchoLox" << DAEMONEOF
 #!/bin/bash
-BINARY="$LBHOMEDIR/bin/plugins/EchoLox/EchoLox"
-CFGFILE="$LBHOMEDIR/config/plugins/EchoLox/EchoLox.cfg"
+LBHOMEDIR="\${LBHOMEDIR:-$LBHOME}"
+BINARY="\$LBHOMEDIR/bin/plugins/EchoLox/EchoLox"
+CFGFILE="\$LBHOMEDIR/config/plugins/EchoLox/EchoLox.cfg"
 PIDFILE="/var/run/EchoLox.pid"
 
-case "$1" in
+case "\$1" in
   start)
-    "$BINARY" --config "$CFGFILE" &
-    echo $! > "$PIDFILE"
-    echo "<OK> EchoLox started (PID $(cat $PIDFILE))"
+    "\$BINARY" --config "\$CFGFILE" &
+    echo \$! > "\$PIDFILE"
+    echo "<OK> EchoLox started (PID \$(cat \$PIDFILE))"
     ;;
   stop)
-    if [ -f "$PIDFILE" ]; then
-      kill $(cat "$PIDFILE") 2>/dev/null && rm -f "$PIDFILE"
+    if [ -f "\$PIDFILE" ]; then
+      kill \$(cat "\$PIDFILE") 2>/dev/null && rm -f "\$PIDFILE"
       echo "<OK> EchoLox stopped"
     else
       echo "<INFO> EchoLox not running"
     fi
     ;;
   status)
-    if [ -f "$PIDFILE" ] && kill -0 $(cat "$PIDFILE") 2>/dev/null; then
-      echo "running (PID $(cat $PIDFILE))"
+    if [ -f "\$PIDFILE" ] && kill -0 \$(cat "\$PIDFILE") 2>/dev/null; then
+      echo "running (PID \$(cat \$PIDFILE))"
     else
       echo "stopped"
     fi
     ;;
   restart)
-    $0 stop
+    \$0 stop
     sleep 1
-    $0 start
+    \$0 start
     ;;
   *)
-    echo "Usage: $0 {start|stop|status|restart}"
+    echo "Usage: \$0 {start|stop|status|restart}"
     exit 1
     ;;
 esac
 exit 0
-EOF
+DAEMONEOF
 chmod +x "$DAEMONDIR/EchoLox"
 
+# ── systemd service for reliable autostart ─────────────────────────────────
+cat > /etc/systemd/system/echolox.service << SVCEOF
+[Unit]
+Description=EchoLox Hue Bridge Emulator for Loxone
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=$LBHOME/bin/plugins/EchoLox/EchoLox --config $LBHOME/config/plugins/EchoLox/EchoLox.cfg
+Environment=LBHOMEDIR=$LBHOME
+Restart=on-failure
+RestartSec=5
+PIDFile=/var/run/EchoLox.pid
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+
+systemctl daemon-reload
+systemctl enable echolox.service
+systemctl start echolox.service
+
+echo "<OK> EchoLox installed and autostart enabled"
 exit 0
