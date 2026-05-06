@@ -50,13 +50,18 @@
 
   <div class="card" style="font-size:0.85em;color:#555">
     <div class="section-title">Alexa-Erkennung: Hilfe</div>
-    <p style="margin-bottom:8px">Alexa (ab 2019) erwartet den Hue Bridge-API auf <strong>Port 80</strong>. EchoLox läuft standardmäßig auf Port 8079.</p>
-    <p style="margin-bottom:8px"><strong>Lösung:</strong> Nginx-Proxy in LoxBerry konfigurieren. Füge folgende Location-Blöcke zum aktiven nginx-Server-Block hinzu:</p>
-    <pre class="vi-preview" style="white-space:pre-wrap;word-break:break-all">location ~ ^/(api/|description\.xml$|hue_logo|favicon\.ico$) {
-    proxy_pass http://127.0.0.1:8079;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-}</pre>
+    <p style="margin-bottom:8px">Alexa (ab 2019) erwartet den Hue Bridge-API auf <strong>Port 80</strong>. EchoLox läuft auf Port 8079; LoxBerry nutzt Apache2 auf Port 80.</p>
+    <p style="margin-bottom:8px">Das Installations-Script richtet den Proxy automatisch ein. Falls das fehlgeschlagen ist, manuell:</p>
+    <pre class="vi-preview" style="white-space:pre-wrap;word-break:break-all"># 1. Apache2-Proxy-Config erstellen:
+cat &gt; /etc/apache2/conf-available/echolox-hue.conf &lt;&lt; 'EOF'
+ProxyPreserveHost On
+ProxyPassMatch ^(/api(/.*)?|/description\.xml|/hue_logo[^/]*|/favicon\.ico)$ http://127.0.0.1:8079$1
+EOF
+
+# 2. Module und Config aktivieren, Apache2 neu laden:
+a2enmod proxy proxy_http
+a2enconf echolox-hue
+apache2ctl graceful</pre>
     <p style="margin-top:8px">Danach <strong>Discovery-Port auf 80</strong> in den <a href="settings.html">Einstellungen</a> setzen und EchoLox neu starten.</p>
   </div>
 </div>

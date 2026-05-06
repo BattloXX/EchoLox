@@ -52,85 +52,51 @@ CFGEOF
   fi
 fi
 
-# ── Try to configure nginx proxy for Alexa port-80 discovery ──────────────
+# ── Configure Apache2 proxy for Alexa port-80 discovery ───────────────────
 # Alexa (post-2019 firmware) requires the Hue Bridge API on port 80.
-# EchoLox runs on port 8079; nginx proxies specific Hue paths to it.
-NGINX_PROXY_OK=1
-if command -v python3 >/dev/null 2>&1; then
-python3 - <<'PYEOF'
-import os, subprocess, sys
+# LoxBerry runs Apache2 on port 80; we add a conf that proxies Hue-specific
+# paths from port 80 to EchoLox on port 8079 without touching existing config.
+APACHE_CONF="/etc/apache2/conf-available/echolox-hue.conf"
+PROXY_OK=0
 
-SITES = [
-    '/etc/nginx/sites-enabled/loxberry.conf',
-    '/etc/nginx/sites-enabled/loxberry',
-    '/etc/nginx/sites-enabled/default',
-    '/etc/nginx/conf.d/default.conf',
-]
+if command -v a2enconf >/dev/null 2>&1; then
+    cat > "$APACHE_CONF" << 'APACHEEOF'
+# EchoLox Hue Bridge proxy — Alexa (post-2019 firmware) requires port 80.
+# Routes Philips Hue API and SSDP paths from port 80 to EchoLox on port 8079.
+# Managed by EchoLox postroot.sh — do not edit manually.
+ProxyPreserveHost On
+ProxyPassMatch ^(/api(/.*)?|/description\.xml|/hue_logo[^/]*|/favicon\.ico)$ http://127.0.0.1:8079$1
+APACHEEOF
 
-BLOCK = (
-    '\n    # echolox-hue-proxy\n'
-    '    location ~ ^/(api/|description\\.xml$|hue_logo|favicon\\.ico$) {\n'
-    '        proxy_pass http://127.0.0.1:8079;\n'
-    '        proxy_set_header Host $host;\n'
-    '        proxy_set_header X-Real-IP $remote_addr;\n'
-    '        proxy_read_timeout 10s;\n'
-    '    }\n'
-    '    # /echolox-hue-proxy\n'
-)
+    a2enmod proxy proxy_http >/dev/null 2>&1
+    a2enconf echolox-hue >/dev/null 2>&1
 
-site = next((s for s in SITES if os.path.exists(s)), None)
-if not site:
-    print('<WARN> EchoLox: nginx site config not found — configure proxy manually for Alexa (see logs page)')
-    sys.exit(1)
-
-content = open(site).read()
-if 'echolox-hue-proxy' in content:
-    print('<OK> EchoLox nginx proxy already configured')
-    sys.exit(0)
-
-idx = content.rfind('}')
-if idx < 0:
-    print('<WARN> EchoLox: cannot parse nginx config — configure proxy manually')
-    sys.exit(1)
-
-open(site + '.echolox.bak', 'w').write(content)
-open(site, 'w').write(content[:idx] + BLOCK + content[idx:])
-
-r = subprocess.run(['nginx', '-t'], capture_output=True)
-if r.returncode == 0:
-    subprocess.run(['nginx', '-s', 'reload'])
-    print('<OK> EchoLox nginx proxy configured (port 80 -> 8079 for Hue API)')
-    sys.exit(0)
-else:
-    open(site, 'w').write(content)
-    if os.path.exists(site + '.echolox.bak'):
-        os.unlink(site + '.echolox.bak')
-    print('<WARN> EchoLox: nginx config test failed — reverted. Configure proxy manually.')
-    sys.exit(1)
-PYEOF
-NGINX_PROXY_OK=$?
+    if apache2ctl configtest >/dev/null 2>&1; then
+        apache2ctl graceful >/dev/null 2>&1
+        echo "<OK> EchoLox Apache2 proxy configured (port 80 -> 8079 for Hue API)"
+        PROXY_OK=1
+    else
+        a2disconf echolox-hue >/dev/null 2>&1
+        rm -f "$APACHE_CONF"
+        echo "<WARN> EchoLox: Apache2 config test failed — configure proxy manually (see /ui/logs.html)"
+    fi
 else
-  echo "<WARN> EchoLox: python3 not found — configure nginx proxy manually for Alexa discovery"
+    echo "<WARN> EchoLox: apache2 not found — configure proxy manually for Alexa discovery"
 fi
 
-# If nginx proxy was configured, set discovery_port: 80 in the config
-if [ "$NGINX_PROXY_OK" -eq 0 ] && command -v python3 >/dev/null 2>&1; then
-  python3 - "$CFGFILE" <<'PYCFG'
-import sys, yaml
-path = sys.argv[1]
-try:
-    with open(path) as f:
-        cfg = yaml.safe_load(f) or {}
-    if 'server' not in cfg or not isinstance(cfg['server'], dict):
-        cfg['server'] = {}
-    if cfg['server'].get('discovery_port', 0) == 0:
-        cfg['server']['discovery_port'] = 80
-        with open(path, 'w') as f:
-            yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
-        print('<OK> EchoLox discovery_port set to 80')
-except Exception as e:
-    print('<WARN> EchoLox: could not update discovery_port:', e)
-PYCFG
+# If proxy was configured, set discovery_port: 80 in EchoLox config
+if [ "$PROXY_OK" -eq 1 ] && command -v python3 >/dev/null 2>&1; then
+    python3 -c "
+import re
+with open('$CFGFILE') as f:
+    content = f.read()
+content = re.sub(r'discovery_port:\s*0', 'discovery_port: 80', content)
+if 'discovery_port:' not in content:
+    content = re.sub(r'(  port:[^\n]*\n)', r'\1  discovery_port: 80\n', content, count=1)
+with open('$CFGFILE', 'w') as f:
+    f.write(content)
+print('<OK> EchoLox discovery_port set to 80')
+" 2>/dev/null || echo "<WARN> EchoLox: could not update discovery_port in config"
 fi
 
 # ── LoxBerry daemon init script ────────────────────────────────────────────

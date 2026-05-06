@@ -107,9 +107,9 @@ func Run(cfg *Config, cfgPath string) error {
 			logbuf.Global.Info("Trying secondary HTTP listener on port %d…", discoveryPort)
 			if err := http.ListenAndServe(addr80, mux); err != nil {
 				logbuf.Global.Info(
-					"Port %d not available (%v). "+
-						"Configure nginx proxy: location ~ ^/(api/|description\\.xml$|hue_logo) { proxy_pass http://127.0.0.1:%d; }",
-					discoveryPort, err, cfg.Server.Port)
+					"Port %d not available (%v) — Apache2 proxy should handle it. "+
+						"Check: a2enmod proxy proxy_http && a2enconf echolox-hue && apache2ctl graceful",
+					discoveryPort, err)
 			}
 		}()
 	}

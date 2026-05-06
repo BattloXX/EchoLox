@@ -218,25 +218,38 @@ EchoLox emuliert eine Philips Hue Bridge Generation 2 (BSB002). Die Erkennung l�
 
 ### Port 80 — wichtig für neuere Alexa-Firmware
 
-Alexa-Geräte mit Firmware ab 2019 erwarten die Hue Bridge zwingend auf **Port 80** in der SSDP-LOCATION. EchoLox läuft selbst auf Port 8079; das Installations-Script richtet daher automatisch einen **nginx-Proxy** ein:
+Alexa-Geräte mit Firmware ab 2019 erwarten die Hue Bridge zwingend auf **Port 80** in der SSDP-LOCATION. EchoLox läuft selbst auf Port 8079; LoxBerry betreibt **Apache2** auf Port 80.
 
-```nginx
-location ~ ^/(api/|description\.xml$|hue_logo|favicon\.ico$) {
-    proxy_pass http://127.0.0.1:8079;
-    proxy_set_header Host $host;
-}
+Das Installations-Script richtet automatisch einen **Apache2-Proxy** ein — es erstellt `/etc/apache2/conf-available/echolox-hue.conf` und aktiviert sie per `a2enconf`, ohne bestehende Konfigurationen zu verändern:
+
+```apache
+ProxyPreserveHost On
+ProxyPassMatch ^(/api(/.*)?|/description\.xml|/hue_logo[^/]*|/favicon\.ico)$ http://127.0.0.1:8079$1
 ```
 
-Wenn die automatische Einrichtung erfolgreich war, setzt `postroot.sh` den `discovery_port` in der Konfiguration auf 80. Du siehst das Ergebnis im LoxBerry-Installationslog (`<OK> EchoLox nginx proxy configured`).
+Bei Erfolg setzt `postroot.sh` den `discovery_port` auf 80 und du siehst im Installationslog:
+```
+<OK> EchoLox Apache2 proxy configured (port 80 -> 8079 for Hue API)
+```
 
 **Manuell einrichten** (falls die Automatik fehlschlägt):
 
-1. Füge obigen Location-Block in den aktiven nginx-Server-Block ein (z.B. `/etc/nginx/sites-enabled/loxberry`)
-2. `nginx -t && nginx -s reload`
-3. Setze in **EchoLox → Einstellungen → Discovery-Port** den Wert `80`
-4. EchoLox neu starten
+```bash
+# Proxy-Config erstellen
+cat > /etc/apache2/conf-available/echolox-hue.conf << 'EOF'
+ProxyPreserveHost On
+ProxyPassMatch ^(/api(/.*)?|/description\.xml|/hue_logo[^/]*|/favicon\.ico)$ http://127.0.0.1:8079$1
+EOF
 
-Ausführliche Anleitung und Diagnose-Hilfe gibt es auf der **[Logs-Seite](#logs--diagnose)** (`/ui/logs.html`).
+# Module und Config aktivieren, Apache2 neu laden
+a2enmod proxy proxy_http
+a2enconf echolox-hue
+apache2ctl graceful
+```
+
+Danach **EchoLox → Einstellungen → Discovery-Port** auf `80` setzen und EchoLox neu starten.
+
+Ausführliche Diagnose-Hilfe gibt es auf der **[Logs-Seite](#logs--diagnose)** (`/ui/logs.html`).
 
 ### Bridge-Identität
 
@@ -253,7 +266,7 @@ Echo Device                    EchoLox (Port 1900 UDP)
     |<-- HTTP/1.1 200 OK (Unicast) --|
     |     LOCATION: http://<ip>:80/description.xml
     |
-    |-- GET :80/description.xml ---->|  (via nginx → 8079)
+    |-- GET :80/description.xml ---->|  (Apache2 proxy → 8079)
     |<-- XML (Philips hue bridge) ---|
     |
     |-- POST :80/api (pairing) ----->|
@@ -580,11 +593,11 @@ Bei jedem Push auf `main` baut GitHub Actions automatisch alle drei Plattformen,
    - `80`: nginx-Proxy muss laufen  
    - `0` / `8079`: Alexa (neue Firmware) findet die Bridge möglicherweise nicht
 
-4. **nginx-Proxy Status** — im LoxBerry-Installationslog:
+4. **Apache2-Proxy Status** — im LoxBerry-Installationslog:
    ```
-   <OK> EchoLox nginx proxy configured (port 80 -> 8079 for Hue API)
+   <OK> EchoLox Apache2 proxy configured (port 80 -> 8079 for Hue API)
    ```
-   Falls nicht: Proxy manuell einrichten (Anleitung auf `/ui/logs.html`).
+   Falls nicht vorhanden: Proxy manuell einrichten (Anleitung auf `/ui/logs.html`).
 
 5. **Gleicher Subnetz?** Echo und LoxBerry müssen im selben Subnetz sein.
 
