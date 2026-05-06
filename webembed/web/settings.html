@@ -14,6 +14,7 @@
     <a href="index.html">Geräte</a>
     <a href="status.html">Status</a>
     <a href="settings.html">Einstellungen</a>
+    <a href="backup.html">Backup</a>
     <a href="import.html">Import</a>
     <a href="about.html">About</a>
   </div>
@@ -49,10 +50,12 @@
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Speichern</button>
         <button type="button" onclick="testConnection()" class="btn">Miniserver testen</button>
+        <button type="button" onclick="restartService()" class="btn btn-warning" id="restartBtn">Dienst neu starten</button>
         <span class="save-notice" id="saveNotice"></span>
       </div>
     </form>
     <div id="testResult" class="test-result"></div>
+    <div id="restartResult" class="test-result"></div>
   </div>
 </div>
 <script src="assets/app.js"></script>

@@ -65,7 +65,7 @@ func Run(cfg *Config, cfgPath string) error {
 	hueAPI := hue.NewAPI(mgr, loxClient, verifier, info)
 	hueAPI.Register(mux)
 
-	apiHandler := api.NewHandler(mgr, loxClient, verifier, lbs, cfgPath)
+	apiHandler := api.NewHandler(mgr, loxClient, verifier, lbs, cfgPath, cfg.DataDir)
 	apiHandler.Register(mux)
 
 	webHandler := web.NewHandler(mgr, verifier, lbs, web.WebConfig{

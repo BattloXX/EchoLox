@@ -50,3 +50,10 @@ tr:hover td { background: #f7faf2; }
 .test-result.error { background: #fce4ec; color: #b71c1c; border: 1px solid #f48fb1; display: block; }
 .test-result.info { background: #e8f4fd; color: #1565c0; border: 1px solid #90caf9; display: block; }
 .save-notice { font-size: 0.85em; color: #888; margin-left: 8px; }
+.btn-warning { background: #e67e22; color: white; border-color: #c96a10; }
+.btn-warning:hover { background: #c96a10; }
+.btn-danger { background: #c0392b; color: white; border-color: #a93226; }
+.btn-danger:hover { background: #a93226; }
+.backup-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.9em; }
+.backup-item:last-child { border-bottom: none; }
+.backup-item .ts { color: #555; font-family: monospace; }

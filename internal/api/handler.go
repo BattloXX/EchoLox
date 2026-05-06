@@ -1,10 +1,18 @@
 package api
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -18,10 +26,11 @@ type Handler struct {
 	verifier *loxone.Verifier
 	lbs      map[string]loxone.LBMiniserver
 	cfgPath  string
+	dataDir  string
 }
 
-func NewHandler(mgr *device.Manager, lox *loxone.Client, verifier *loxone.Verifier, lbs map[string]loxone.LBMiniserver, cfgPath string) *Handler {
-	return &Handler{mgr: mgr, lox: lox, verifier: verifier, lbs: lbs, cfgPath: cfgPath}
+func NewHandler(mgr *device.Manager, lox *loxone.Client, verifier *loxone.Verifier, lbs map[string]loxone.LBMiniserver, cfgPath, dataDir string) *Handler {
+	return &Handler{mgr: mgr, lox: lox, verifier: verifier, lbs: lbs, cfgPath: cfgPath, dataDir: dataDir}
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -31,6 +40,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/echolox/api/miniservers", h.handleMiniservers)
 	mux.HandleFunc("/echolox/api/verify", h.handleVerify)
 	mux.HandleFunc("/echolox/api/settings", h.handleSettings)
+	mux.HandleFunc("/echolox/api/restart", h.handleRestart)
+	mux.HandleFunc("/echolox/api/backup/download", h.handleBackupDownload)
+	mux.HandleFunc("/echolox/api/backup/restore", h.handleBackupRestore)
+	mux.HandleFunc("/echolox/api/backup/restore-local", h.handleBackupRestoreLocal)
+	mux.HandleFunc("/echolox/api/backup/delete", h.handleBackupDelete)
+	mux.HandleFunc("/echolox/api/backup", h.handleBackup)
 }
 
 func (h *Handler) handleDevices(w http.ResponseWriter, r *http.Request) {
@@ -293,6 +308,248 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", 405)
 	}
+}
+
+// ── Restart ────────────────────────────────────────────────────────────────
+
+func (h *Handler) handleRestart(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok", "message": "EchoLox wird neu gestartet…"})
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+	go func() {
+		time.Sleep(600 * time.Millisecond)
+		if err := exec.Command("systemctl", "restart", "echolox.service").Run(); err != nil {
+			os.Exit(0) // let systemd restart via Restart=on-failure
+		}
+	}()
+}
+
+// ── Backup ─────────────────────────────────────────────────────────────────
+
+func (h *Handler) handleBackup(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	switch r.Method {
+	case http.MethodGet:
+		h.backupList(w)
+	case http.MethodPost:
+		h.backupCreateLocal(w)
+	default:
+		http.Error(w, "method not allowed", 405)
+	}
+}
+
+func (h *Handler) backupList(w http.ResponseWriter) {
+	backupDir := filepath.Join(h.dataDir, "backup")
+	entries, _ := os.ReadDir(backupDir)
+	type item struct {
+		File      string `json:"file"`
+		Timestamp string `json:"timestamp"`
+		Display   string `json:"display"`
+	}
+	result := []item{}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".zip") {
+			continue
+		}
+		name := e.Name() // echolox_backup_20060102_150405.zip
+		if len(name) < 34 {
+			continue
+		}
+		ts := name[len(name)-19 : len(name)-4] // 20060102_150405
+		t, err := time.ParseInLocation("20060102_150405", ts, time.Local)
+		display := ts
+		if err == nil {
+			display = t.Format("02.01.2006 15:04:05")
+		}
+		result = append(result, item{File: name, Timestamp: ts, Display: display})
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Timestamp > result[j].Timestamp })
+	writeJSON(w, result)
+}
+
+func (h *Handler) backupCreateLocal(w http.ResponseWriter) {
+	backupDir := filepath.Join(h.dataDir, "backup")
+	if err := os.MkdirAll(backupDir, 0755); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	ts := time.Now().Format("20060102_150405")
+	zipPath := filepath.Join(backupDir, "echolox_backup_"+ts+".zip")
+	if err := h.writeBackupZip(zipPath); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok", "timestamp": ts, "file": filepath.Base(zipPath)})
+}
+
+func (h *Handler) writeBackupZip(dst string) error {
+	f, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	zw := zip.NewWriter(f)
+	defer zw.Close()
+	addToZip := func(src, name string) {
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return
+		}
+		fw, err := zw.Create(name)
+		if err != nil {
+			return
+		}
+		fw.Write(data)
+	}
+	if h.cfgPath != "" {
+		addToZip(h.cfgPath, "EchoLox.cfg")
+	}
+	addToZip(filepath.Join(h.dataDir, "devices.json"), "devices.json")
+	return nil
+}
+
+func (h *Handler) handleBackupDownload(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	addToZip := func(src, name string) {
+		if data, err := os.ReadFile(src); err == nil {
+			if fw, err := zw.Create(name); err == nil {
+				fw.Write(data)
+			}
+		}
+	}
+	if h.cfgPath != "" {
+		addToZip(h.cfgPath, "EchoLox.cfg")
+	}
+	addToZip(filepath.Join(h.dataDir, "devices.json"), "devices.json")
+	zw.Close()
+	ts := time.Now().Format("20060102_150405")
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="echolox_backup_%s.zip"`, ts))
+	w.Write(buf.Bytes())
+}
+
+func (h *Handler) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	r.ParseMultipartForm(10 << 20)
+	file, _, err := r.FormFile("backup")
+	if err != nil {
+		http.Error(w, "backup-Datei erforderlich: "+err.Error(), 400)
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(file)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	h.restoreFromZipBytes(w, data)
+}
+
+func (h *Handler) handleBackupRestoreLocal(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		File string `json:"file"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.File == "" {
+		http.Error(w, "file erforderlich", 400)
+		return
+	}
+	// Prevent path traversal
+	if strings.Contains(req.File, "/") || strings.Contains(req.File, "\\") {
+		http.Error(w, "ungültiger Dateiname", 400)
+		return
+	}
+	zipPath := filepath.Join(h.dataDir, "backup", req.File)
+	data, err := os.ReadFile(zipPath)
+	if err != nil {
+		http.Error(w, "Datei nicht gefunden: "+err.Error(), 404)
+		return
+	}
+	h.restoreFromZipBytes(w, data)
+}
+
+func (h *Handler) handleBackupDelete(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		File string `json:"file"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.File == "" {
+		http.Error(w, "file erforderlich", 400)
+		return
+	}
+	if strings.Contains(req.File, "/") || strings.Contains(req.File, "\\") {
+		http.Error(w, "ungültiger Dateiname", 400)
+		return
+	}
+	zipPath := filepath.Join(h.dataDir, "backup", req.File)
+	if err := os.Remove(zipPath); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+func (h *Handler) restoreFromZipBytes(w http.ResponseWriter, data []byte) {
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		http.Error(w, "ungültige ZIP-Datei: "+err.Error(), 400)
+		return
+	}
+	restored := []string{}
+	for _, f := range zr.File {
+		rc, err := f.Open()
+		if err != nil {
+			continue
+		}
+		content, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			continue
+		}
+		switch f.Name {
+		case "EchoLox.cfg":
+			if h.cfgPath != "" {
+				if os.WriteFile(h.cfgPath, content, 0644) == nil {
+					restored = append(restored, "EchoLox.cfg")
+				}
+			}
+		case "devices.json":
+			devPath := filepath.Join(h.dataDir, "devices.json")
+			if os.WriteFile(devPath, content, 0644) == nil {
+				h.mgr.Reload()
+				restored = append(restored, "devices.json")
+			}
+		}
+	}
+	if len(restored) == 0 {
+		http.Error(w, "keine bekannten Dateien im Backup gefunden", 400)
+		return
+	}
+	writeJSON(w, map[string]interface{}{"status": "ok", "restored": restored})
 }
 
 func setCORS(w http.ResponseWriter) {

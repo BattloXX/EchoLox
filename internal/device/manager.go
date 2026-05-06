@@ -161,3 +161,33 @@ func (m *Manager) persist() error {
 	}
 	return m.store.Save(list)
 }
+
+// DBPath returns the path to the devices.json file.
+func (m *Manager) DBPath() string { return m.store.path }
+
+// Reload re-reads devices.json from disk, replacing the in-memory state.
+func (m *Manager) Reload() error {
+	devices, err := m.store.Load()
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.byID = make(map[string]*Device)
+	m.byHueID = make(map[string]*Device)
+	m.states = make(map[string]*State)
+	m.nextHue = 1
+	for _, d := range devices {
+		if d.HueID == "" {
+			d.HueID = strconv.Itoa(m.nextHue)
+		}
+		n, _ := strconv.Atoi(d.HueID)
+		if n >= m.nextHue {
+			m.nextHue = n + 1
+		}
+		m.byID[d.ID] = d
+		m.byHueID[d.HueID] = d
+		m.states[d.ID] = &State{Brightness: 254}
+	}
+	return nil
+}

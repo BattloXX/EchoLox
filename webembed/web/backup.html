@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EchoLox – Backup</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <span class="brand">EchoLox</span>
+  <button class="nav-toggle" onclick="toggleNav()" aria-label="Menü">&#9776;</button>
+  <div class="nav-links" id="navLinks">
+    <a href="index.html">Geräte</a>
+    <a href="status.html">Status</a>
+    <a href="settings.html">Einstellungen</a>
+    <a href="backup.html">Backup</a>
+    <a href="import.html">Import</a>
+    <a href="about.html">About</a>
+  </div>
+</nav>
+<div class="container">
+
+  <div class="card">
+    <div class="section-title">Backup erstellen</div>
+    <p style="font-size:0.9em;color:#666;margin-bottom:16px">
+      Sichert die Konfiguration (<code>EchoLox.cfg</code>) und alle Geräte (<code>devices.json</code>) in einer ZIP-Datei.
+    </p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <button onclick="createLocalBackup()" class="btn btn-primary">Lokal speichern</button>
+      <a href="/echolox/api/backup/download" class="btn" id="downloadBtn">Herunterladen</a>
+    </div>
+    <div id="backupResult" class="test-result"></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Backup wiederherstellen</div>
+    <p style="font-size:0.9em;color:#666;margin-bottom:16px">
+      ZIP-Datei hochladen (enthält <code>EchoLox.cfg</code> und/oder <code>devices.json</code>).
+      Nach der Wiederherstellung EchoLox neu starten.
+    </p>
+    <div id="restoreDropZone" class="upload-area" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleRestoreDrop(event)">
+      <div style="font-size:1.5em;margin-bottom:8px">📂</div>
+      <div>ZIP-Datei hierher ziehen oder</div>
+      <label style="cursor:pointer;margin-top:8px;display:inline-block">
+        <span class="btn" style="margin-top:8px">Datei wählen</span>
+        <input type="file" id="restoreFile" accept=".zip" style="display:none" onchange="handleRestoreFile(this.files[0])">
+      </label>
+    </div>
+    <div id="restoreResult" class="test-result"></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Lokale Backups</div>
+    <div id="backupList"><em style="color:#999">Wird geladen…</em></div>
+  </div>
+
+</div>
+<script src="assets/app.js"></script>
+<script>loadBackupList();</script>
+</body>
+</html>

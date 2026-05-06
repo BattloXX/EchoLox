@@ -311,6 +311,135 @@ async function testConnection() {
   }
 }
 
+// ── Restart ────────────────────────────────────────────────────────────────
+
+async function restartService() {
+  const btn = document.getElementById('restartBtn');
+  const result = document.getElementById('restartResult');
+  if (btn) { btn.disabled = true; btn.textContent = 'Neustart läuft…'; }
+  if (result) { result.className = 'test-result info'; result.textContent = 'EchoLox wird neu gestartet…'; }
+  try {
+    await fetch(`${API}/restart`, { method: 'POST' });
+  } catch(_) {}
+  // Poll until service responds again (max 30s)
+  const start = Date.now();
+  while (Date.now() - start < 30000) {
+    await new Promise(r => setTimeout(r, 1500));
+    try {
+      const r = await fetch(`${API}/status`, { signal: AbortSignal.timeout(2000) });
+      if (r.ok) {
+        if (result) { result.className = 'test-result ok'; result.textContent = '✓ EchoLox erfolgreich neu gestartet'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Dienst neu starten'; }
+        return;
+      }
+    } catch(_) {}
+  }
+  if (result) { result.className = 'test-result error'; result.textContent = '✗ Neustart dauert länger als erwartet — Seite neu laden'; }
+  if (btn) { btn.disabled = false; btn.textContent = 'Dienst neu starten'; }
+}
+
+// ── Backup ─────────────────────────────────────────────────────────────────
+
+async function createLocalBackup() {
+  const result = document.getElementById('backupResult');
+  if (result) { result.className = 'test-result info'; result.textContent = 'Backup wird erstellt…'; }
+  try {
+    const res = await fetch(`${API}/backup`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      if (result) { result.className = 'test-result ok'; result.textContent = `✓ Backup gespeichert: ${data.file}`; }
+      loadBackupList();
+    } else {
+      if (result) { result.className = 'test-result error'; result.textContent = '✗ ' + (data.error || 'Fehler'); }
+    }
+  } catch(e) {
+    if (result) { result.className = 'test-result error'; result.textContent = '✗ ' + e.message; }
+  }
+}
+
+async function loadBackupList() {
+  const container = document.getElementById('backupList');
+  if (!container) return;
+  try {
+    const res = await fetch(`${API}/backup`);
+    const list = await res.json() || [];
+    if (!list.length) {
+      container.innerHTML = '<em style="color:#999">Keine lokalen Backups vorhanden</em>';
+      return;
+    }
+    container.innerHTML = list.map(b => `
+      <div class="backup-item">
+        <span class="ts">${b.display}</span>
+        <div style="display:flex;gap:8px">
+          <button onclick="restoreLocalBackup('${b.file}')" class="btn action-btn">Wiederherstellen</button>
+          <button onclick="deleteLocalBackup('${b.file}')" class="btn action-btn btn-danger">Löschen</button>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    container.innerHTML = '<em style="color:#c00">Fehler: ' + e.message + '</em>';
+  }
+}
+
+async function restoreLocalBackup(file) {
+  if (!confirm(`Backup "${file}" wiederherstellen? Die aktuellen Daten werden überschrieben.`)) return;
+  const result = document.getElementById('restoreResult');
+  if (result) { result.className = 'test-result info'; result.textContent = 'Wiederherstellung läuft…'; }
+  try {
+    const res = await fetch(`${API}/backup/restore-local`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ file })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      if (result) { result.className = 'test-result ok'; result.textContent = `✓ Wiederhergestellt: ${(data.restored||[]).join(', ')} — bitte EchoLox neu starten`; }
+    } else {
+      if (result) { result.className = 'test-result error'; result.textContent = '✗ ' + (data || 'Fehler'); }
+    }
+  } catch(e) {
+    if (result) { result.className = 'test-result error'; result.textContent = '✗ ' + e.message; }
+  }
+}
+
+async function deleteLocalBackup(file) {
+  if (!confirm(`Backup "${file}" löschen?`)) return;
+  try {
+    await fetch(`${API}/backup/delete`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ file })
+    });
+    loadBackupList();
+  } catch(_) {}
+}
+
+function handleRestoreDrop(event) {
+  event.preventDefault();
+  document.getElementById('restoreDropZone').classList.remove('dragover');
+  const file = event.dataTransfer.files[0];
+  if (file) handleRestoreFile(file);
+}
+
+async function handleRestoreFile(file) {
+  if (!file) return;
+  if (!confirm(`Backup "${file.name}" wiederherstellen? Die aktuellen Daten werden überschrieben.`)) return;
+  const result = document.getElementById('restoreResult');
+  if (result) { result.className = 'test-result info'; result.textContent = 'Wird hochgeladen und wiederhergestellt…'; }
+  const form = new FormData();
+  form.append('backup', file);
+  try {
+    const res = await fetch(`${API}/backup/restore`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (res.ok) {
+      if (result) { result.className = 'test-result ok'; result.textContent = `✓ Wiederhergestellt: ${(data.restored||[]).join(', ')} — bitte EchoLox neu starten`; }
+    } else {
+      if (result) { result.className = 'test-result error'; result.textContent = '✗ ' + (data || 'Fehler'); }
+    }
+  } catch(e) {
+    if (result) { result.className = 'test-result error'; result.textContent = '✗ ' + e.message; }
+  }
+}
+
 // ── Import ─────────────────────────────────────────────────────────────────
 
 let importData = [];

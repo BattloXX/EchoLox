@@ -27,6 +27,6 @@ sleep 1
 echo "<OK> EchoLox stopped"
 
 # Ensure icon destination exists so the installer can copy the icon there
-mkdir -p "${LBHOMEDIR:-/opt/loxberry}/webfrontend/html/system/images/icons/plugins" 2>/dev/null
+mkdir -p "${LBHOMEDIR:-/opt/loxberry}/webfrontend/html/system/images/icons/EchoLox" 2>/dev/null
 
 exit 0
