@@ -9,10 +9,14 @@
 <body>
 <nav class="navbar">
   <span class="brand">EchoLox</span>
-  <a href="index.html">Geräte</a>
-  <a href="status.html">Status</a>
-  <a href="settings.html">Einstellungen</a>
-  <a href="import.html">Import</a>
+  <button class="nav-toggle" onclick="toggleNav()" aria-label="Menü">&#9776;</button>
+  <div class="nav-links" id="navLinks">
+    <a href="index.html">Geräte</a>
+    <a href="status.html">Status</a>
+    <a href="settings.html">Einstellungen</a>
+    <a href="import.html">Import</a>
+    <a href="about.html">About</a>
+  </div>
 </nav>
 <div class="container">
   <h1>Alte Konfiguration importieren</h1>

@@ -1,5 +1,33 @@
 const API = '/echolox/api';
 
+function toggleNav() {
+  document.getElementById('navLinks').classList.toggle('open');
+}
+
+// ── About ──────────────────────────────────────────────────────────────────
+
+async function loadAbout() {
+  // Bridge info from /api/config (Hue endpoint)
+  try {
+    const res = await fetch('/api/nouser/config');
+    if (res.ok) {
+      const cfg = await res.json();
+      const el = document.getElementById('bridgeInfo');
+      if (el) {
+        el.innerHTML = `
+          <dt>Bridge ID</dt><dd style="font-family:monospace">${cfg.bridgeid || '—'}</dd>
+          <dt>IP-Adresse</dt><dd>${cfg.ipaddress || '—'}</dd>
+          <dt>API-Version</dt><dd>${cfg.apiversion || '—'}</dd>
+          <dt>Modell</dt><dd>${cfg.modelid || '—'}</dd>`;
+      }
+    }
+  } catch(_) {}
+
+  // Version from plugin.cfg via status endpoint or hardcoded
+  const verEl = document.getElementById('version');
+  if (verEl) verEl.textContent = '1.0.0';
+}
+
 // ── Devices ────────────────────────────────────────────────────────────────
 
 async function loadDevices() {

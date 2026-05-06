@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EchoLox – About</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .about-logo { font-size: 3em; font-weight: bold; color: #69aa23; letter-spacing: 0.05em; margin-bottom: 8px; }
+  .about-sub { color: #666; margin-bottom: 24px; }
+  .about-link { color: #69aa23; text-decoration: none; font-weight: 500; }
+  .about-link:hover { text-decoration: underline; }
+  .info-grid { display: grid; grid-template-columns: 140px 1fr; gap: 10px 16px; font-size: 0.95em; }
+  .info-grid dt { color: #888; font-weight: 500; }
+  .info-grid dd { color: #333; }
+  .divider { border: none; border-top: 1px solid #e8e8e8; margin: 20px 0; }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <span class="brand">EchoLox</span>
+  <button class="nav-toggle" onclick="toggleNav()" aria-label="Menü">&#9776;</button>
+  <div class="nav-links" id="navLinks">
+    <a href="index.html">Geräte</a>
+    <a href="status.html">Status</a>
+    <a href="settings.html">Einstellungen</a>
+    <a href="import.html">Import</a>
+    <a href="about.html">About</a>
+  </div>
+</nav>
+<div class="container">
+  <div class="card">
+    <div class="about-logo">EchoLox</div>
+    <div class="about-sub">Philips Hue Bridge Emulator für Loxone &amp; LoxBerry</div>
+
+    <dl class="info-grid">
+      <dt>Version</dt>
+      <dd id="version">—</dd>
+      <dt>Plattform</dt>
+      <dd>LoxBerry Plugin</dd>
+      <dt>Protokoll</dt>
+      <dd>Philips Hue API v1.47.0 · SSDP/UPnP</dd>
+      <dt>Autor</dt>
+      <dd>Johannes Battlogg</dd>
+      <dt>Lizenz</dt>
+      <dd>MIT</dd>
+    </dl>
+
+    <hr class="divider">
+
+    <p style="margin-bottom:12px">
+      EchoLox emuliert eine Philips Hue Bridge, sodass Amazon Alexa Loxone
+      Virtual Inputs direkt ansteuern kann — ohne Cloud, ohne Umwege.
+    </p>
+
+    <a href="https://github.com/BattloXX/EchoLox" target="_blank" rel="noopener" class="btn btn-primary">
+      GitHub Repository
+    </a>
+    &nbsp;
+    <a href="https://github.com/BattloXX/EchoLox/issues" target="_blank" rel="noopener" class="btn">
+      Fehler melden
+    </a>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Bridge-Info</div>
+    <dl class="info-grid" id="bridgeInfo">
+      <dt>Status</dt><dd>Lade…</dd>
+    </dl>
+  </div>
+</div>
+<script src="assets/app.js"></script>
+<script>loadAbout();</script>
+</body>
+</html>

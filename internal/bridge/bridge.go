@@ -24,7 +24,10 @@ func Run(cfg *Config, cfgPath string) error {
 		return fmt.Errorf("device manager: %w", err)
 	}
 
-	lbs, _ := loxone.ReadLoxBerryMiniservers()
+	lbs, err := loxone.ReadLoxBerryMiniservers()
+	if err != nil {
+		log.Printf("WARNING: %v — Miniserver commands will be disabled", err)
+	}
 	var ms *loxone.LBMiniserver
 	if lbs != nil {
 		if entry, ok := lbs[cfg.Loxone.Miniserver]; ok {
