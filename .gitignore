@@ -1,4 +1,5 @@
 bin/EchoLox
 *.zip
 data/
+daemon/
 *.tmp
