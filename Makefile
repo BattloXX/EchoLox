@@ -22,8 +22,8 @@ local:
 	go build $(LDFLAGS) -o bin/$(BINARY) ./cmd/$(BINARY)
 
 zip:
-	zip -r $(BINARY)-$(VERSION).zip . \
-		-x "*.git*" -x "bin/$(BINARY)" -x "*.tmp" -x "go.sum"
+	zip -r $(BINARY)-$(VERSION).zip * \
+		-x "*.git*" -x "bin/$(BINARY)" -x "*.zip" -x "*.tmp" -x "go.sum" -x "generated-image.png"
 
 clean:
 	rm -f bin/$(BINARY)-* bin/$(BINARY) $(BINARY)-*.zip
