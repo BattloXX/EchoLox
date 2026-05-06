@@ -103,5 +103,13 @@ systemctl daemon-reload
 systemctl enable echolox.service
 systemctl start echolox.service
 
+# ── Install plugin icon into LoxBerry web frontend ─────────────────────────
+ICONDIR="$LBHOMEDIR/webfrontend/html/system/images/icons/plugins"
+mkdir -p "$ICONDIR"
+if [ -f "$LBPBINDIR/EchoLox.png" ]; then
+    cp "$LBPBINDIR/EchoLox.png" "$ICONDIR/EchoLox.png"
+    echo "<OK> EchoLox icon installed"
+fi
+
 echo "<OK> EchoLox installed — autostart via systemd enabled"
 exit 0
