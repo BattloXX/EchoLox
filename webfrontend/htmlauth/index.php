@@ -4,7 +4,7 @@ $lbhome = getenv('LBHOMEDIR');
 if (!$lbhome) $lbhome = '/opt/loxberry';
 
 // Read port from config (default 8083)
-$port = 8083;
+$port = 8079;
 $cfgfile = "$lbhome/config/plugins/EchoLox/EchoLox.cfg";
 if (file_exists($cfgfile)) {
     foreach (file($cfgfile) as $line) {

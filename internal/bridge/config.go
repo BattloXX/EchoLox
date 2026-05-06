@@ -31,7 +31,7 @@ type Config struct {
 
 func DefaultConfig() *Config {
 	c := &Config{}
-	c.Server.Port = 8083
+	c.Server.Port = 8079
 	c.UPNP.Name = "EchoLox"
 	c.Loxone.Miniserver = "1"
 	c.Loxone.Transport = "http"
