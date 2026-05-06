@@ -17,7 +17,10 @@ type SentRecord struct {
 }
 
 type Device struct {
-	ID            string                `json:"id"`
+	ID string `json:"id"`
+	// HueID is the short numeric string exposed in the Hue API ("1", "2", ...).
+	// Alexa requires stable numeric-like IDs across restarts.
+	HueID         string                `json:"hue_id"`
 	Name          string                `json:"name"`
 	Type          DeviceType            `json:"type"`
 	VirtualInputs map[string]string     `json:"virtual_inputs"`

@@ -10,6 +10,7 @@ import (
 	"github.com/BattloXX/EchoLox/internal/api"
 	"github.com/BattloXX/EchoLox/internal/device"
 	"github.com/BattloXX/EchoLox/internal/hue"
+	"github.com/BattloXX/EchoLox/internal/identity"
 	"github.com/BattloXX/EchoLox/internal/loxone"
 	"github.com/BattloXX/EchoLox/internal/migrate"
 	"github.com/BattloXX/EchoLox/internal/upnp"
@@ -44,47 +45,41 @@ func Run(cfg *Config) error {
 
 	verifier := loxone.NewVerifier(loxClient)
 
-	mux := http.NewServeMux()
-
-	// UPnP description
 	bridgeIP := cfg.Server.IP
 	if bridgeIP == "" {
 		bridgeIP = autoDetectIP()
 	}
-	upnp.RegisterDescription(mux, bridgeIP, cfg.Server.Port, cfg.UPNP.UUID)
 
-	// Hue API
-	hueAPI := hue.NewAPI(mgr, loxClient, verifier)
+	// BridgeInfo is derived deterministically from IP — UUID/bridgeid stay
+	// consistent across restarts so Alexa doesn't lose the bridge.
+	info := identity.New(bridgeIP, cfg.Server.Port)
+	log.Printf("Bridge identity: IP=%s  bridgeid=%s  UUID=%s", info.IP, info.BridgeID, info.UUID)
+
+	mux := http.NewServeMux()
+
+	upnp.RegisterDescription(mux, info)
+
+	hueAPI := hue.NewAPI(mgr, loxClient, verifier, info)
 	hueAPI.Register(mux)
 
-	// Management REST API
 	apiHandler := api.NewHandler(mgr, loxClient, verifier, lbs)
 	apiHandler.Register(mux)
 
-	// Web UI
 	webHandler := web.NewHandler(mgr, verifier, lbs, web.WebConfig{
 		ServerPort: cfg.Server.Port,
-		ServerIP:   cfg.Server.IP,
+		ServerIP:   bridgeIP,
 	})
 	webHandler.Register(mux)
 
-	// Migrate API endpoint
 	migrateHandler := migrate.NewHandler(mgr)
 	migrateHandler.Register(mux)
 
-	addr := fmt.Sprintf("%s:%d", cfg.Server.IP, cfg.Server.Port)
-	log.Printf("HTTP server listening on %s", addr)
-
-	// Start SSDP listener in background
 	go func() {
-		l, err := upnp.NewListener(bridgeIP, cfg.Server.Port, cfg.UPNP.UUID)
-		if err != nil {
-			log.Printf("SSDP listener error: %v", err)
-			return
-		}
-		l.Listen()
+		upnp.NewListener(info).Listen()
 	}()
 
+	addr := fmt.Sprintf(":%d", cfg.Server.Port)
+	log.Printf("HTTP server listening on %s", addr)
 	return http.ListenAndServe(addr, mux)
 }
 
