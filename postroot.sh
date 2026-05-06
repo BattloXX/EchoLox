@@ -15,6 +15,8 @@ LBPLOGDIR="${LBPLOGDIR:-$LBHOMEDIR/log/plugins/EchoLox}"
 
 DAEMONDIR="$LBHOMEDIR/daemon/plugins/EchoLox"
 PIDFILE="/var/run/EchoLox.pid"
+# User config lives in the data dir so it survives plugin updates
+CFGFILE="$LBPDATADIR/EchoLox.cfg"
 
 # ── Select architecture-specific binary ────────────────────────────────────
 ARCH=$(uname -m)
@@ -26,13 +28,37 @@ case "$ARCH" in
 esac
 chmod +x "$LBPBINDIR/EchoLox"
 
+# ── Create/migrate user config into data dir (survives updates) ─────────────
+mkdir -p "$LBPDATADIR"
+if [ ! -f "$CFGFILE" ]; then
+  # Migrate from old location (config dir) if present
+  if [ -f "$LBPCFGDIR/EchoLox.cfg" ]; then
+    cp "$LBPCFGDIR/EchoLox.cfg" "$CFGFILE"
+    echo "<OK> EchoLox config migrated from config to data dir"
+  else
+    cat > "$CFGFILE" << 'CFGEOF'
+server:
+  port: 8079
+  ip: ""
+
+loxone:
+  miniserver: "1"
+  transport: "http"
+  udp_port: 7777
+
+data_dir: ""
+CFGEOF
+    echo "<OK> EchoLox default config created"
+  fi
+fi
+
 # ── LoxBerry daemon init script ────────────────────────────────────────────
 mkdir -p "$DAEMONDIR"
 cat > "$DAEMONDIR/EchoLox" << DAEMONEOF
 #!/bin/bash
 # Paths are baked in at install time from LoxBerry variables
 BINARY="$LBPBINDIR/EchoLox"
-CFGFILE="$LBPCFGDIR/EchoLox.cfg"
+CFGFILE="$CFGFILE"
 PIDFILE="$PIDFILE"
 export LBHOMEDIR="$LBHOMEDIR"
 export LBPBINDIR="$LBPBINDIR"
@@ -85,7 +111,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=$LBPBINDIR/EchoLox --config $LBPCFGDIR/EchoLox.cfg
+ExecStart=$LBPBINDIR/EchoLox --config $CFGFILE
 Environment=LBHOMEDIR=$LBHOMEDIR
 Environment=LBPBINDIR=$LBPBINDIR
 Environment=LBPCFGDIR=$LBPCFGDIR

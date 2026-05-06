@@ -37,7 +37,7 @@ func DefaultConfig() *Config {
 	c.Loxone.Transport = "http"
 	c.Loxone.UDPPort = 7777
 	c.MQTT.Broker = "tcp://localhost:1883"
-	c.DataDir = lbPath("LBPDATA", "./data")
+	c.DataDir = lbPath("LBPDATADIR", "./data")
 	return c
 }
 
@@ -51,7 +51,7 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 	if cfg.DataDir == "" {
-		cfg.DataDir = lbPath("LBPDATA", "./data")
+		cfg.DataDir = lbPath("LBPDATADIR", "./data")
 	}
 	return cfg, nil
 }
@@ -64,10 +64,10 @@ func lbPath(envKey, fallback string) string {
 }
 
 var (
-	DataDir   = lbPath("LBPDATA", "./data")
-	ConfigDir = lbPath("LBPCFG", "./config")
-	LogDir    = lbPath("LBPLOG", "./log")
-	BinDir    = lbPath("LBPBIN", "./bin")
+	DataDir   = lbPath("LBPDATADIR", "./data")
+	ConfigDir = lbPath("LBPCFGDIR", "./config")
+	LogDir    = lbPath("LBPLOGDIR", "./log")
+	BinDir    = lbPath("LBPBINDIR", "./bin")
 
 	_ = filepath.Join // keep import used
 )

@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	defaultCfg := filepath.Join(lbPath("LBPCFG", "./config"), "EchoLox.cfg")
+	defaultCfg := filepath.Join(lbPath("LBPDATADIR", "./data"), "EchoLox.cfg")
 	cfgPath := flag.String("config", defaultCfg, "path to config file")
 	importFrom := flag.String("import", "", "import old devices.db path (CLI mode)")
 	importOut := flag.String("import-out", "", "output dir for imported devices")
