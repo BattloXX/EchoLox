@@ -10,6 +10,8 @@ import (
 	"unsafe"
 )
 
+const soReusePort = 0xf // SO_REUSEPORT (Linux, all arches)
+
 // listenMulticast binds to UDP 0.0.0.0:1900 with SO_REUSEPORT so EchoLox can
 // coexist with the LoxBerry system ssdpd that already holds port 1900.
 func listenMulticast() (*net.UDPConn, error) {
@@ -17,7 +19,7 @@ func listenMulticast() (*net.UDPConn, error) {
 		Control: func(_, _ string, c syscall.RawConn) error {
 			return c.Control(func(fd uintptr) {
 				syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
-				syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEPORT, 1)
+				syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, soReusePort, 1)
 			})
 		},
 	}
