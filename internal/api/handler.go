@@ -47,6 +47,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/echolox/api/backup/restore-local", h.handleBackupRestoreLocal)
 	mux.HandleFunc("/echolox/api/backup/delete", h.handleBackupDelete)
 	mux.HandleFunc("/echolox/api/backup", h.handleBackup)
+	mux.HandleFunc("/echolox/api/mqtt/subscriptions", h.handleMQTTSubscriptions)
 	mux.HandleFunc("/echolox/api/logs/download", h.handleLogsDownload)
 	mux.HandleFunc("/echolox/api/logs/level", h.handleLogsLevel)
 	mux.HandleFunc("/echolox/api/logs", h.handleLogs)
@@ -263,16 +264,20 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 			"port":           cfg.Server.Port,
 			"discovery_port": cfg.Server.DiscoveryPort,
 			"mqtt_broker":    cfg.MQTT.Broker,
+			"mqtt_username":  cfg.MQTT.Username,
+			"mqtt_password":  cfg.MQTT.Password,
 		})
 
 	case http.MethodPost:
 		var req struct {
-			Miniserver    string `json:"miniserver"`
-			Transport     string `json:"transport"`
-			UDPPort       int    `json:"udp_port"`
-			Port          int    `json:"port"`
-			DiscoveryPort *int   `json:"discovery_port"`
-			MQTTBroker    string `json:"mqtt_broker"`
+			Miniserver    string  `json:"miniserver"`
+			Transport     string  `json:"transport"`
+			UDPPort       int     `json:"udp_port"`
+			Port          int     `json:"port"`
+			DiscoveryPort *int    `json:"discovery_port"`
+			MQTTBroker    string  `json:"mqtt_broker"`
+			MQTTUsername  string  `json:"mqtt_username"`
+			MQTTPassword  *string `json:"mqtt_password"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), 400)
@@ -296,6 +301,12 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.MQTTBroker != "" {
 			cfg.MQTT.Broker = req.MQTTBroker
+		}
+		if req.MQTTUsername != "" {
+			cfg.MQTT.Username = req.MQTTUsername
+		}
+		if req.MQTTPassword != nil {
+			cfg.MQTT.Password = *req.MQTTPassword
 		}
 		if h.cfgPath == "" {
 			http.Error(w, "no config path configured", 500)
@@ -635,6 +646,101 @@ func (h *Handler) handleLogsDownload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="echolox_%s.log"`, ts))
 	w.Write([]byte(sb.String()))
+}
+
+// ── MQTT Subscriptions ─────────────────────────────────────────────────────
+
+func (h *Handler) mqttSubsPath() string {
+	return filepath.Join(h.dataDir, "mqtt_subscriptions.json")
+}
+
+func (h *Handler) loadMQTTSubs() ([]loxone.MQTTSubscription, error) {
+	data, err := os.ReadFile(h.mqttSubsPath())
+	if os.IsNotExist(err) {
+		return []loxone.MQTTSubscription{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var subs []loxone.MQTTSubscription
+	return subs, json.Unmarshal(data, &subs)
+}
+
+func (h *Handler) saveMQTTSubs(subs []loxone.MQTTSubscription) error {
+	data, err := json.MarshalIndent(subs, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(h.mqttSubsPath(), data, 0644)
+}
+
+func (h *Handler) handleMQTTSubscriptions(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	switch r.Method {
+	case http.MethodGet:
+		subs, err := h.loadMQTTSubs()
+		if err != nil {
+			writeErr(w, 500, err)
+			return
+		}
+		writeJSON(w, subs)
+
+	case http.MethodPost:
+		var sub loxone.MQTTSubscription
+		if err := json.NewDecoder(r.Body).Decode(&sub); err != nil {
+			writeErr(w, 400, err)
+			return
+		}
+		if sub.Topic == "" || sub.Target == "" {
+			writeErr(w, 400, fmt.Errorf("topic und target sind erforderlich"))
+			return
+		}
+		subs, err := h.loadMQTTSubs()
+		if err != nil {
+			writeErr(w, 500, err)
+			return
+		}
+		for _, s := range subs {
+			if s.Topic == sub.Topic {
+				writeErr(w, 409, fmt.Errorf("topic %q existiert bereits", sub.Topic))
+				return
+			}
+		}
+		subs = append(subs, sub)
+		if err := h.saveMQTTSubs(subs); err != nil {
+			writeErr(w, 500, err)
+			return
+		}
+		writeJSON(w, sub)
+
+	case http.MethodDelete:
+		var req struct {
+			Topic string `json:"topic"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Topic == "" {
+			writeErr(w, 400, fmt.Errorf("topic erforderlich"))
+			return
+		}
+		subs, err := h.loadMQTTSubs()
+		if err != nil {
+			writeErr(w, 500, err)
+			return
+		}
+		filtered := subs[:0]
+		for _, s := range subs {
+			if s.Topic != req.Topic {
+				filtered = append(filtered, s)
+			}
+		}
+		if err := h.saveMQTTSubs(filtered); err != nil {
+			writeErr(w, 500, err)
+			return
+		}
+		writeJSON(w, map[string]string{"deleted": req.Topic})
+
+	default:
+		http.Error(w, "method not allowed", 405)
+	}
 }
 
 func setCORS(w http.ResponseWriter) {

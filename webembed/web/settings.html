@@ -47,11 +47,19 @@
       <div class="form-group">
         <label>Discovery-Port (SSDP / Alexa)</label>
         <input type="number" id="discoveryPort" value="0" placeholder="0 = gleich wie EchoLox-Port">
-        <small style="color:#888;display:block;margin-top:4px">Alexa (ab 2019) erwartet Port 80. Setze auf 80 und konfiguriere einen nginx-Proxy (Infos unter <a href="logs.html">Logs</a>).</small>
+        <small style="color:#888;display:block;margin-top:4px">Alexa (ab 2019) erwartet Port 80. Setze auf 80 wenn der Apache2-Proxy läuft (Infos unter <a href="logs.html">Logs</a>).</small>
       </div>
       <div class="form-group">
         <label>MQTT Broker</label>
         <input type="text" id="mqttBroker" placeholder="tcp://localhost:1883">
+      </div>
+      <div class="form-group">
+        <label>MQTT Benutzername</label>
+        <input type="text" id="mqttUsername" placeholder="(leer = kein Auth)">
+      </div>
+      <div class="form-group">
+        <label>MQTT Passwort</label>
+        <input type="password" id="mqttPassword" placeholder="(leer = kein Auth)">
       </div>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Speichern</button>
@@ -63,8 +71,31 @@
     <div id="testResult" class="test-result"></div>
     <div id="restartResult" class="test-result"></div>
   </div>
+
+  <h2 style="margin-top:2rem">MQTT Subscriptions</h2>
+  <p style="color:#666;margin-bottom:1rem">Eingehende MQTT-Nachrichten werden an den jeweiligen Virtual Input weitergeleitet (MQTT → Loxone).</p>
+  <div class="card">
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="border-bottom:1px solid #e0e0e0">
+          <th style="text-align:left;padding:8px 4px">Topic</th>
+          <th style="text-align:left;padding:8px 4px">Ziel Virtual Input</th>
+          <th style="width:90px"></th>
+        </tr>
+      </thead>
+      <tbody id="mqttSubBody">
+        <tr><td colspan="3" style="color:#999;text-align:center;padding:12px">Laden…</td></tr>
+      </tbody>
+    </table>
+    <div style="display:flex;gap:8px;margin-top:1rem;flex-wrap:wrap">
+      <input type="text" id="newSubTopic" placeholder="home/lights/wohnzimmer" style="flex:1;min-width:180px">
+      <input type="text" id="newSubTarget" placeholder="echolox_wohnzimmer_licht_on" style="flex:1;min-width:200px">
+      <button onclick="addMQTTSubscription()" class="btn btn-primary">Hinzufügen</button>
+    </div>
+    <div id="mqttSubResult" class="test-result"></div>
+  </div>
 </div>
 <script src="assets/app.js"></script>
-<script>loadSettings();</script>
+<script>loadSettings(); loadMQTTSubscriptions();</script>
 </body>
 </html>

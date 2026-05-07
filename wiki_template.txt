@@ -1,0 +1,252 @@
+====== EchoLox ======
+
+**Philips Hue Bridge Emulator für Loxone & Amazon Alexa**
+
+EchoLox ist ein LoxBerry-Plugin, das eine Philips Hue Bridge emuliert, damit Amazon Alexa Loxone Virtual Inputs über Sprachbefehle steuern kann. EchoLox ist in Go geschrieben und verbraucht nur ~10–20 MB RAM — im Gegensatz zu ha-bridge (Java, ~150–300 MB).
+
+^ Plugin-Name | EchoLox ^
+^ Autor | Johannes Battlogg |
+^ Kategorie | Sprachsteuerung / Alexa |
+^ LoxBerry-Version | ab 2.0 |
+^ Plattformen | Raspberry Pi (arm64, armv7), x86 (amd64) |
+^ Projekt | [[https://github.com/BattloXX/EchoLox|github.com/BattloXX/EchoLox]] |
+^ Lizenz | Open Source |
+
+----
+
+===== Funktionsprinzip =====
+
+<code>
+Alexa
+  │  Hue-API (Port 80 via Apache2-Proxy)
+  ▼
+EchoLox (LoxBerry Plugin, Port 8079)
+  │  HTTP GET /dev/sps/io/{name}/{value}
+  │  oder UDP {name}={value}
+  ▼
+Loxone Miniserver → Virtual Inputs → Logik-Blöcke
+</code>
+
+Alexa erkennt EchoLox als echte Philips Hue Bridge (SSDP/UPnP). Jedes in EchoLox angelegte Gerät erscheint in der Alexa-App als Hue-Lampe.
+
+----
+
+===== Voraussetzungen =====
+
+  * **LoxBerry** ab Version 2.0
+  * **Loxone Miniserver** (beliebige Generation) im selben Netzwerk
+  * **Amazon Echo** im selben Subnetz wie LoxBerry
+
+> Echo, LoxBerry und Miniserver müssen im **gleichen Subnetz** sein (SSDP funktioniert nicht über Router-Grenzen).
+
+----
+
+===== Installation =====
+
+==== Über den LoxBerry Plugin Manager ====
+
+  - LoxBerry Web-Oberfläche öffnen → **Plugin Manager**
+  - **Plugin installieren** → **Von URL installieren**
+  - ZIP-URL aus dem [[https://github.com/BattloXX/EchoLox/releases/latest|GitHub Releases]] einfügen
+  - Nach der Installation erscheint **EchoLox** in der LoxBerry Navigation
+  - Der Dienst startet automatisch auf Port **8079**
+
+Das Installations-Script richtet automatisch einen **Apache2-Proxy** für Port 80 ein (für Alexa-Kompatibilität).
+
+==== Installation prüfen ====
+
+Im Browser aufrufen:
+<code>
+http://<loxberry-ip>:8079/description.xml
+</code>
+Antwort: XML-Dokument mit ``Philips hue bridge 2015``.
+
+----
+
+===== Einrichtung =====
+
+==== 1. Miniserver-Verbindung prüfen ====
+
+**EchoLox → Einstellungen** öffnen.
+
+  * Miniserver wird automatisch aus der LoxBerry-Konfiguration gelesen — keine manuelle Eingabe nötig
+  * Dropdown: gewünschten Miniserver wählen (bei mehreren konfigurierten)
+  * **Verbindung testen** klicken → "Miniserver erreichbar"
+
+==== 2. Gerät anlegen ====
+
+**EchoLox → Geräte → + Neu**:
+
+  * **Name:** z.B. ``Wohnzimmer Licht`` (genau so, wie du es Alexa sagst)
+  * **Typ:** ``Dimmer``
+  * **Transport:** ``HTTP``
+
+Generierte Virtual Input Namen (werden sofort angezeigt):
+  * ``echolox_wohnzimmer_licht_on``
+  * ``echolox_wohnzimmer_licht_off``
+  * ``echolox_wohnzimmer_licht_brightness``
+
+==== 3. Virtual Inputs in Loxone Config anlegen ====
+
+Loxone Config öffnen → **Peripherie → Virtual Inputs → Virtual HTTP Input**:
+
+^ Virtual Input Name | Wert |
+| ``echolox_wohnzimmer_licht_on`` | 0/1 |
+| ``echolox_wohnzimmer_licht_off`` | 0/1 |
+| ``echolox_wohnzimmer_licht_brightness`` | 0–100 |
+
+Namen exakt wie von EchoLox generiert übernehmen, Config auf Miniserver laden.
+
+==== 4. Alexa: Neue Geräte suchen ====
+
+**"Alexa, suche nach neuen Geräten"** sagen — oder Alexa-App → Geräte → + → Philips Hue.
+
+----
+
+===== Gerätetypen =====
+
+^ Typ ^ Alexa-Befehle ^ Generierte Virtual Inputs ^
+| ``switch`` | Ein/Aus | ``{name}_on``, ``{name}_off`` |
+| ``dimmer`` | Ein/Aus, Helligkeit % | ``{name}_on``, ``{name}_off``, ``{name}_brightness`` |
+| ``color`` | Ein/Aus, Helligkeit, Farbe | ``{name}_on``, ``{name}_off``, ``{name}_brightness``, ``{name}_hue``, ``{name}_saturation`` |
+| ``scene`` | "Aktiviere …" | ``{name}_activate`` |
+
+Alle Namen erhalten automatisch den Prefix ``echolox_``.
+
+==== Namensnormalisierung ====
+
+^ Eingabe ^ Generierter Prefix ^
+| ``Wohnzimmer Licht`` | ``echolox_wohnzimmer_licht_`` |
+| ``Küche Decke`` | ``echolox_kueche_decke_`` |
+| ``Terrasse Süd`` | ``echolox_terrasse_sued_`` |
+
+Regeln: Kleinbuchstaben, Umlaute → ae/oe/ue/ss, Sonderzeichen → Unterstrich.
+
+----
+
+===== Transports =====
+
+==== HTTP (Standard) ====
+
+<code>
+GET http://<miniserver-ip>/dev/sps/io/<name>/<value>
+Authorization: Basic base64(<user>:<password>)
+</code>
+
+Credentials und IP werden aus der LoxBerry-Konfiguration gelesen.
+
+==== UDP ====
+
+EchoLox sendet UDP-Pakete an den Miniserver: ``echolox_wohnzimmer_licht_on=1\r\n``
+
+Port einstellbar (Standard: 7777). Sehr geringe Latenz.
+
+==== MQTT ====
+
+EchoLox publisht auf ``loxone/{name}`` mit dem Wert als Payload.
+
+**Einstellungen → MQTT**: Broker-URL, Benutzername und Passwort konfigurieren.
+
+**MQTT Subscriptions (MQTT → Loxone):** Eingehende MQTT-Nachrichten können direkt an Virtual Inputs weitergeleitet werden. Konfiguration unter **Einstellungen → MQTT Subscriptions**:
+
+^ Feld ^ Beispiel ^
+| Topic | ``home/lights/wohnzimmer`` |
+| Ziel Virtual Input | ``echolox_wohnzimmer_licht_on`` |
+
+----
+
+===== Alexa-Erkennung (SSDP/UPnP) =====
+
+EchoLox emuliert eine Philips Hue Bridge Generation 2. Die Erkennung läuft über SSDP/UPnP (UDP Multicast ``239.255.255.250:1900``).
+
+==== Port 80 — wichtig für neuere Alexa-Firmware ====
+
+Alexa-Geräte mit Firmware ab 2019 erwarten die Hue Bridge auf **Port 80**. Das Installations-Script richtet automatisch einen **Apache2-Proxy** ein, der Hue-API-Pfade von Port 80 an EchoLox auf Port 8079 weiterleitet.
+
+EchoLox nutzt ``SO_REUSEPORT``, um Port 1900 gleichzeitig mit LoxBerrys eigenem ``ssdpd`` verwenden zu können — kein Konflikt.
+
+Wenn die Discovery-Port-Einstellung auf ``80`` gesetzt ist und der Apache2-Proxy läuft, wird die Bridge von Alexa zuverlässig gefunden.
+
+----
+
+===== Einstellungen =====
+
+**EchoLox → Einstellungen** (``/ui/settings.html``):
+
+^ Einstellung ^ Standard ^ Beschreibung ^
+| Miniserver | (aus LoxBerry) | Welcher Miniserver verwendet wird |
+| Transport | HTTP | http, udp oder mqtt |
+| UDP Port | 7777 | Port für UDP-Transport |
+| EchoLox Port | 8079 | Port auf dem EchoLox lauscht |
+| Discovery-Port | 80 | Port in SSDP-Antwort (80 = Alexa-kompatibel) |
+| MQTT Broker | tcp://localhost:1883 | Broker-URL |
+| MQTT Benutzername | — | Optionaler MQTT-Benutzer |
+| MQTT Passwort | — | Optionales MQTT-Passwort |
+
+Port-Änderungen erfordern einen Neustart (**Dienst neu starten**-Button).
+
+----
+
+===== Backup & Restore =====
+
+**EchoLox → Backup** (``/ui/backup.html``) sichert:
+  * ``EchoLox.cfg`` — alle Einstellungen
+  * ``devices.json`` — alle angelegten Geräte
+
+Backup herunterladen, lokal speichern oder aus gespeicherter Liste wiederherstellen.
+
+----
+
+===== Daten & Updates =====
+
+Einstellungen und Gerätedatenbank liegen in ``/opt/loxberry/data/plugins/EchoLox/`` — dieses Verzeichnis wird bei Plugin-Updates **nicht** überschrieben. Geräte und Einstellungen bleiben bei Updates erhalten.
+
+LoxBerry prüft automatisch auf neue Versionen über die [[https://raw.githubusercontent.com/BattloXX/EchoLox/main/release.cfg|release.cfg]].
+
+----
+
+===== Troubleshooting =====
+
+==== Alexa findet die Bridge nicht ====
+
+  - **Debug-Logs** aktivieren unter ``/ui/logs.html`` → "Alexa, suche Geräte" → ``SSDP M-SEARCH`` im Log vorhanden?
+  - **description.xml** prüfen: ``http://<loxberry-ip>:80/description.xml`` → Antwort: ``Philips hue bridge 2015``
+  - **Discovery-Port** in Einstellungen auf ``80`` setzen (Apache2-Proxy muss laufen)
+  - **Gleicher Subnetz?** Echo und LoxBerry müssen im selben Subnetz sein
+  - **Firewall?** UDP Port 1900 muss offen sein
+
+==== Alexa erkennt Geräte, Befehle kommen nicht an ====
+
+  - **Testen-Button** in der Geräteliste → sendet direkt an Miniserver
+  - **Status-Seite** (``/ui/status.html``): ``not_found`` → VI-Namen in Loxone Config prüfen
+  - **Verbindungstest** in Einstellungen → Credentials prüfen
+
+==== EchoLox startet nicht ====
+
+<code bash>
+systemctl status echolox.service
+journalctl -u echolox.service -n 50
+</code>
+
+----
+
+===== Sprachbefehle =====
+
+^ Befehl ^ Aktion ^
+| "Alexa, schalte [Name] ein" | ``{name}_on = 1`` |
+| "Alexa, schalte [Name] aus" | ``{name}_off = 1`` |
+| "Alexa, dimme [Name] auf 50 Prozent" | ``{name}_brightness = 50`` |
+| "Alexa, stelle [Name] auf rot" | ``{name}_hue = 0``, ``{name}_saturation = 100`` |
+| "Alexa, aktiviere [Szenenname]" | ``{name}_activate = 1`` |
+
+----
+
+===== Links =====
+
+  * [[https://github.com/BattloXX/EchoLox|GitHub Repository]]
+  * [[https://github.com/BattloXX/EchoLox/releases/latest|Aktuelle Version]]
+  * [[https://github.com/BattloXX/EchoLox/issues|Fehler melden / Feature-Anfragen]]
+
+----
+
+//Autor: Johannes Battlogg — [[johannes@battlogg.org]]//

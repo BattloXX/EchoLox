@@ -267,6 +267,8 @@ async function loadSettings() {
         const m = document.getElementById('mqttBroker');
         if (m) m.value = cfg.mqtt_broker;
       }
+      const mu = document.getElementById('mqttUsername');
+      if (mu && cfg.mqtt_username) mu.value = cfg.mqtt_username;
     }
   } catch(_) {}
 
@@ -275,6 +277,7 @@ async function loadSettings() {
   if (form) {
     form.addEventListener('submit', async e => {
       e.preventDefault();
+      const pwEl = document.getElementById('mqttPassword');
       const body = {
         miniserver: document.getElementById('miniserver')?.value || '',
         transport:  document.getElementById('loxTransport')?.value || 'http',
@@ -282,6 +285,8 @@ async function loadSettings() {
         port:           parseInt(document.getElementById('serverPort')?.value) || 8079,
         discovery_port: parseInt(document.getElementById('discoveryPort')?.value) || 0,
         mqtt_broker:    document.getElementById('mqttBroker')?.value || '',
+        mqtt_username:  document.getElementById('mqttUsername')?.value || '',
+        mqtt_password:  pwEl ? pwEl.value : undefined,
       };
       const res = await fetch(`${API}/settings`, {
         method: 'POST',
@@ -592,4 +597,68 @@ function resetImport() {
   document.getElementById('previewSection').style.display = 'none';
   document.getElementById('fileName').textContent = '';
   document.getElementById('fileInput').value = '';
+}
+
+// ── MQTT Subscriptions ─────────────────────────────────────────────────────
+
+async function loadMQTTSubscriptions() {
+  const tbody = document.getElementById('mqttSubBody');
+  if (!tbody) return;
+  try {
+    const res = await fetch(`${API}/mqtt/subscriptions`);
+    const subs = await res.json() || [];
+    if (!subs.length) {
+      tbody.innerHTML = '<tr><td colspan="3" style="color:#999;text-align:center">Keine Subscriptions konfiguriert</td></tr>';
+      return;
+    }
+    tbody.innerHTML = subs.map(s => `
+      <tr>
+        <td style="font-family:monospace">${escapeHtml(s.topic)}</td>
+        <td style="font-family:monospace">${escapeHtml(s.target)}</td>
+        <td><button onclick="deleteMQTTSubscription('${escapeHtml(s.topic)}')" class="btn action-btn">Löschen</button></td>
+      </tr>`).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="3" style="color:#c00">Fehler: ${e.message}</td></tr>`;
+  }
+}
+
+async function addMQTTSubscription() {
+  const topic  = document.getElementById('newSubTopic')?.value?.trim();
+  const target = document.getElementById('newSubTarget')?.value?.trim();
+  const result = document.getElementById('mqttSubResult');
+  if (!topic || !target) {
+    if (result) { result.className = 'test-result error'; result.textContent = 'Topic und Ziel-VI sind erforderlich'; }
+    return;
+  }
+  try {
+    const res = await fetch(`${API}/mqtt/subscriptions`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({topic, target}),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      if (result) { result.className = 'test-result ok'; result.textContent = '✓ Subscription hinzugefügt'; }
+      document.getElementById('newSubTopic').value = '';
+      document.getElementById('newSubTarget').value = '';
+      loadMQTTSubscriptions();
+    } else {
+      if (result) { result.className = 'test-result error'; result.textContent = '✗ ' + (data.error || 'Fehler'); }
+    }
+  } catch(e) {
+    if (result) { result.className = 'test-result error'; result.textContent = '✗ ' + e.message; }
+  }
+  setTimeout(() => { if (result) result.textContent = ''; }, 4000);
+}
+
+async function deleteMQTTSubscription(topic) {
+  if (!confirm(`Subscription für "${topic}" löschen?`)) return;
+  try {
+    const res = await fetch(`${API}/mqtt/subscriptions`, {
+      method: 'DELETE',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({topic}),
+    });
+    if (res.ok) loadMQTTSubscriptions();
+  } catch(_) {}
 }
