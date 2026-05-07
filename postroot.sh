@@ -32,13 +32,22 @@ chmod +x "$LBPBINDIR/EchoLox"
 mkdir -p "$LBPDATADIR"
 mkdir -p "$LBPLOGDIR"
 chown -R loxberry:loxberry "$LBPDATADIR" "$LBPLOGDIR" 2>/dev/null || true
+
+# Restore devices.json if it was lost during the update
+if [ ! -f "$LBPDATADIR/devices.json" ] && [ -f "/tmp/EchoLox_devices.bak" ]; then
+    cp "/tmp/EchoLox_devices.bak" "$LBPDATADIR/devices.json"
+    chown loxberry:loxberry "$LBPDATADIR/devices.json" 2>/dev/null || true
+    echo "<OK> EchoLox devices restored from backup"
+fi
+rm -f "/tmp/EchoLox_devices.bak"
+
 if [ ! -f "$CFGFILE" ]; then
   # Migrate from old location (config dir) if present
   if [ -f "$LBPCFGDIR/EchoLox.cfg" ]; then
     cp "$LBPCFGDIR/EchoLox.cfg" "$CFGFILE"
     echo "<OK> EchoLox config migrated from config to data dir"
   else
-    cat > "$CFGFILE" << 'CFGEOF'
+    cat > "$CFGFILE" << CFGEOF
 server:
   port: 8079
   discovery_port: 0
@@ -48,7 +57,7 @@ loxone:
   transport: "http"
   udp_port: 7777
 
-data_dir: ""
+data_dir: "$LBPDATADIR"
 CFGEOF
     echo "<OK> EchoLox default config created"
   fi

@@ -26,6 +26,13 @@ pkill -f "bin/plugins/EchoLox/EchoLox" 2>/dev/null
 sleep 1
 echo "<OK> EchoLox stopped"
 
+# Backup devices.json before update so it can be restored if needed
+DEVICES_JSON="${LBPDATADIR:-/opt/loxberry/data/plugins/EchoLox}/devices.json"
+if [ -f "$DEVICES_JSON" ]; then
+    cp "$DEVICES_JSON" /tmp/EchoLox_devices.bak
+    echo "<OK> EchoLox devices backed up"
+fi
+
 # Ensure icon destination exists so the installer can copy the icon there
 mkdir -p "${LBHOMEDIR:-/opt/loxberry}/webfrontend/html/system/images/icons/EchoLox" 2>/dev/null
 
