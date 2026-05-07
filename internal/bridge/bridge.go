@@ -98,22 +98,6 @@ func Run(cfg *Config, cfgPath string) error {
 		upnp.NewListener(info).Listen()
 	}()
 
-	// Try to also listen on discovery port when it differs from the main port.
-	// This enables direct port-80 access on standalone (non-LoxBerry) installations.
-	// On LoxBerry, nginx proxies port 80 -> 8079 so this bind will fail — that's expected.
-	if discoveryPort > 0 && discoveryPort != cfg.Server.Port {
-		go func() {
-			addr80 := fmt.Sprintf(":%d", discoveryPort)
-			logbuf.Global.Info("Trying secondary HTTP listener on port %d…", discoveryPort)
-			if err := http.ListenAndServe(addr80, mux); err != nil {
-				logbuf.Global.Info(
-					"Port %d not available (%v) — Apache2 proxy should handle it. "+
-						"Check: a2enmod proxy proxy_http && a2enconf echolox-hue && apache2ctl graceful",
-					discoveryPort, err)
-			}
-		}()
-	}
-
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	logbuf.Global.Info("EchoLox HTTP server listening on %s", addr)
 	return http.ListenAndServe(addr, mux)

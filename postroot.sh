@@ -14,7 +14,7 @@ LBPDATADIR="${LBPDATADIR:-$LBHOMEDIR/data/plugins/EchoLox}"
 LBPLOGDIR="${LBPLOGDIR:-$LBHOMEDIR/log/plugins/EchoLox}"
 
 DAEMONDIR="$LBHOMEDIR/daemon/plugins/EchoLox"
-PIDFILE="/var/run/EchoLox.pid"
+PIDFILE="/tmp/EchoLox.pid"
 # User config lives in the data dir so it survives plugin updates
 CFGFILE="$LBPDATADIR/EchoLox.cfg"
 
@@ -62,10 +62,15 @@ PROXY_OK=0
 if command -v a2enconf >/dev/null 2>&1; then
     cat > "$APACHE_CONF" << 'APACHEEOF'
 # EchoLox Hue Bridge proxy — Alexa (post-2019 firmware) requires port 80.
-# Routes Philips Hue API and SSDP paths from port 80 to EchoLox on port 8079.
 # Managed by EchoLox postroot.sh — do not edit manually.
 ProxyPreserveHost On
-ProxyPassMatch ^(/api(/.*)?|/description\.xml|/hue_logo[^/]*|/favicon\.ico)$ http://127.0.0.1:8079$1
+# EchoLox web UI and internal management API
+ProxyPass /ui/ http://127.0.0.1:8079/ui/
+ProxyPassReverse /ui/ http://127.0.0.1:8079/ui/
+ProxyPass /echolox/ http://127.0.0.1:8079/echolox/
+ProxyPassReverse /echolox/ http://127.0.0.1:8079/echolox/
+# Philips Hue API paths required for Alexa discovery
+ProxyPassMatch ^(/api(/.*)?|/description\.xml|/hue_logo[^/]*)$ http://127.0.0.1:8079$1
 APACHEEOF
 
     a2enmod proxy proxy_http >/dev/null 2>&1
@@ -73,11 +78,12 @@ APACHEEOF
 
     if apache2ctl configtest >/dev/null 2>&1; then
         apache2ctl graceful >/dev/null 2>&1
-        echo "<OK> EchoLox Apache2 proxy configured (port 80 -> 8079 for Hue API)"
+        echo "<OK> EchoLox Apache2 proxy configured (port 80 -> 8079 for Hue API + UI)"
         PROXY_OK=1
     else
         a2disconf echolox-hue >/dev/null 2>&1
         rm -f "$APACHE_CONF"
+        apache2ctl graceful >/dev/null 2>&1
         echo "<WARN> EchoLox: Apache2 config test failed — configure proxy manually (see /ui/logs.html)"
     fi
 else
@@ -153,18 +159,19 @@ chmod +x "$DAEMONDIR/EchoLox"
 cat > /etc/systemd/system/echolox.service << SVCEOF
 [Unit]
 Description=EchoLox Hue Bridge Emulator for Loxone
-After=network-online.target
+After=network-online.target apache2.service
 Wants=network-online.target
 
 [Service]
 Type=simple
+User=loxberry
+Group=loxberry
 ExecStart=$LBPBINDIR/EchoLox --config $CFGFILE
 Environment=LBHOMEDIR=$LBHOMEDIR
 Environment=LBPBINDIR=$LBPBINDIR
 Environment=LBPCFGDIR=$LBPCFGDIR
 Environment=LBPDATADIR=$LBPDATADIR
 Environment=LBPLOGDIR=$LBPLOGDIR
-PIDFile=$PIDFILE
 Restart=on-failure
 RestartSec=5
 
@@ -188,6 +195,16 @@ for SIZE in 64 128 256 512; do
     fi
 done
 [ "$ICONS_OK" -gt 0 ] && echo "<OK> EchoLox icons installed ($ICONS_OK sizes)"
+
+# ── LoxBerry plugin admin redirect ────────────────────────────────────────
+# Creates a landing page so the EchoLox UI is reachable from LoxBerry's
+# admin panel at /admin/plugins/EchoLox/
+PLUGINWEBDIR="$LBHOMEDIR/webfrontend/htmlauth/plugins/EchoLox"
+mkdir -p "$PLUGINWEBDIR"
+cat > "$PLUGINWEBDIR/index.php" << 'PHPEOF'
+<?php header("Location: /ui/"); exit;
+PHPEOF
+echo "<OK> EchoLox plugin admin page created"
 
 echo "<OK> EchoLox installed — autostart via systemd enabled"
 exit 0

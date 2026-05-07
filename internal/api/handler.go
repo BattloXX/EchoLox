@@ -271,7 +271,7 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 			Transport     string `json:"transport"`
 			UDPPort       int    `json:"udp_port"`
 			Port          int    `json:"port"`
-			DiscoveryPort int    `json:"discovery_port"`
+			DiscoveryPort *int   `json:"discovery_port"`
 			MQTTBroker    string `json:"mqtt_broker"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -291,7 +291,9 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 		if req.Port > 0 {
 			cfg.Server.Port = req.Port
 		}
-		cfg.Server.DiscoveryPort = req.DiscoveryPort
+		if req.DiscoveryPort != nil {
+			cfg.Server.DiscoveryPort = *req.DiscoveryPort
+		}
 		if req.MQTTBroker != "" {
 			cfg.MQTT.Broker = req.MQTTBroker
 		}

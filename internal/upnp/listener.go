@@ -39,12 +39,7 @@ func (l *Listener) location() string {
 }
 
 func (l *Listener) Listen() {
-	addr, err := net.ResolveUDPAddr("udp4", ssdpAddr)
-	if err != nil {
-		logbuf.Global.Info("SSDP resolve error: %v", err)
-		return
-	}
-	conn, err := net.ListenMulticastUDP("udp4", nil, addr)
+	conn, err := listenMulticast()
 	if err != nil {
 		logbuf.Global.Info("SSDP listen error: %v — Alexa discovery disabled", err)
 		return
