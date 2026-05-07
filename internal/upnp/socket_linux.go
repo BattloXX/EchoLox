@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"syscall"
+	"unsafe"
 )
 
 // listenMulticast binds to UDP 0.0.0.0:1900 with SO_REUSEPORT so EchoLox can
@@ -30,13 +31,22 @@ func listenMulticast() (*net.UDPConn, error) {
 		conn.Close()
 		return nil, fmt.Errorf("syscall conn: %w", err)
 	}
-	mreq := &syscall.IPMreq{}
-	copy(mreq.Multiaddr[:], net.ParseIP("239.255.255.250").To4())
-	var joinErr error
+	mreq := syscall.IPMreq{
+		Multiaddr: [4]byte{239, 255, 255, 250},
+	}
+	var joinErr syscall.Errno
 	raw.Control(func(fd uintptr) {
-		joinErr = syscall.SetsockoptIpmreq(int(fd), syscall.IPPROTO_IP, syscall.IP_ADD_MEMBERSHIP, mreq)
+		_, _, joinErr = syscall.Syscall6(
+			syscall.SYS_SETSOCKOPT,
+			fd,
+			syscall.IPPROTO_IP,
+			syscall.IP_ADD_MEMBERSHIP,
+			uintptr(unsafe.Pointer(&mreq)),
+			unsafe.Sizeof(mreq),
+			0,
+		)
 	})
-	if joinErr != nil {
+	if joinErr != 0 {
 		conn.Close()
 		return nil, fmt.Errorf("join multicast group: %w", joinErr)
 	}
