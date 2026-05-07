@@ -4,7 +4,7 @@
 
 ```
 Alexa
-  |  Hue-API  (Port 80 via nginx-Proxy oder direkt)
+  |  Hue-API  (Port 80 via Apache2-Proxy)
   v
 EchoLox  (LoxBerry Plugin, Port 8079)
   |  HTTP GET  /dev/sps/io/{name}/{value}   (Basic Auth)
@@ -37,6 +37,7 @@ Loxone bleibt die einzige Automations-Zentrale. EchoLox ist ausschliesslich die 
 - [Import alter Konfiguration](#import-alter-konfiguration)
 - [Einstellungen](#einstellungen)
 - [Konfigurationsdatei](#konfigurationsdatei)
+- [Automatische Updates (LoxBerry)](#automatische-updates-loxberry)
 - [Technische Architektur](#technische-architektur)
 - [Build & Cross-Compilation](#build--cross-compilation)
 - [Troubleshooting](#troubleshooting)
@@ -92,7 +93,7 @@ Authorization: Basic base64(user:password)
 4. Nach der Installation erscheint **EchoLox** in der LoxBerry Navigation
 5. Der Dienst startet automatisch auf Port **8079**
 
-Das Installations-Script versucht automatisch einen **nginx-Proxy** für Port 80 einzurichten (Alexa-Kompatibilität — siehe [Alexa-Erkennung](#alexa-erkennung)).
+Das Installations-Script richtet automatisch einen **Apache2-Proxy** für Port 80 ein (Alexa-Kompatibilität — siehe [Alexa-Erkennung](#alexa-erkennung)).
 
 ### Prüfen ob der Dienst läuft
 
@@ -224,24 +225,32 @@ Das Installations-Script richtet automatisch einen **Apache2-Proxy** ein — es 
 
 ```apache
 ProxyPreserveHost On
-ProxyPassMatch ^(/api(/.*)?|/description\.xml|/hue_logo[^/]*|/favicon\.ico)$ http://127.0.0.1:8079$1
+# EchoLox Web-UI und internes Management-API
+ProxyPass /ui/ http://127.0.0.1:8079/ui/
+ProxyPassReverse /ui/ http://127.0.0.1:8079/ui/
+ProxyPass /echolox/ http://127.0.0.1:8079/echolox/
+ProxyPassReverse /echolox/ http://127.0.0.1:8079/echolox/
+# Philips Hue API-Pfade für Alexa-Discovery
+ProxyPassMatch ^(/api(/.*)?|/description\.xml|/hue_logo[^/]*)$ http://127.0.0.1:8079$1
 ```
 
 Bei Erfolg setzt `postroot.sh` den `discovery_port` auf 80 und du siehst im Installationslog:
 ```
-<OK> EchoLox Apache2 proxy configured (port 80 -> 8079 for Hue API)
+<OK> EchoLox Apache2 proxy configured (port 80 -> 8079 for Hue API + UI)
 ```
 
 **Manuell einrichten** (falls die Automatik fehlschlägt):
 
 ```bash
-# Proxy-Config erstellen
 cat > /etc/apache2/conf-available/echolox-hue.conf << 'EOF'
 ProxyPreserveHost On
-ProxyPassMatch ^(/api(/.*)?|/description\.xml|/hue_logo[^/]*|/favicon\.ico)$ http://127.0.0.1:8079$1
+ProxyPass /ui/ http://127.0.0.1:8079/ui/
+ProxyPassReverse /ui/ http://127.0.0.1:8079/ui/
+ProxyPass /echolox/ http://127.0.0.1:8079/echolox/
+ProxyPassReverse /echolox/ http://127.0.0.1:8079/echolox/
+ProxyPassMatch ^(/api(/.*)?|/description\.xml|/hue_logo[^/]*)$ http://127.0.0.1:8079$1
 EOF
 
-# Module und Config aktivieren, Apache2 neu laden
 a2enmod proxy proxy_http
 a2enconf echolox-hue
 apache2ctl graceful
@@ -390,7 +399,7 @@ POST /echolox/api/logs/level      {"level": "debug"} oder {"level": "info"}
 2. Sage: "Alexa, suche nach neuen Geräten"
 3. Prüfe in den Logs ob ein `SSDP M-SEARCH` Eintrag erscheint und EchoLox antwortet
 4. Falls kein M-SEARCH: Echo und LoxBerry sind in unterschiedlichen Subnetzen oder Firewall blockiert Port 1900
-5. Falls M-SEARCH empfangen aber Alexa findet trotzdem nichts: Port-80-Problem (nginx-Proxy prüfen, `discovery_port` in Einstellungen)
+5. Falls M-SEARCH empfangen aber Alexa findet trotzdem nichts: Port-80-Problem (Apache2-Proxy prüfen, `discovery_port` in Einstellungen)
 
 ---
 
@@ -417,7 +426,7 @@ Falls du von ha-bridge migrierst, kannst du deine `devices.db` importieren:
 | **Transport** | HTTP | Übertragungsprotokoll |
 | **UDP Port** | 7777 | Port für UDP-Transport |
 | **EchoLox Port** | 8079 | Port auf dem EchoLox lauscht |
-| **Discovery-Port** | 0 | Port in SSDP-LOCATION (0 = gleich wie EchoLox-Port; 80 = Alexa-kompatibel wenn nginx-Proxy läuft) |
+| **Discovery-Port** | 80 | Port in SSDP-LOCATION (0 = gleich wie EchoLox-Port; 80 = Alexa-kompatibel wenn Apache2-Proxy läuft) |
 | **MQTT Broker** | tcp://localhost:1883 | MQTT Broker URL |
 
 Einstellungen werden direkt in `EchoLox.cfg` gespeichert. Port-Änderungen erfordern einen Neustart (**Dienst neu starten**-Button).
@@ -432,7 +441,7 @@ Die Konfiguration liegt unter `/opt/loxberry/data/plugins/EchoLox/EchoLox.cfg` (
 server:
   port: 8079           # Port auf dem EchoLox lauscht
   ip: ""               # leer = automatisch erkannt
-  discovery_port: 80   # Port in SSDP-LOCATION (0 = gleich wie port; 80 wenn nginx-Proxy)
+  discovery_port: 80   # Port in SSDP-LOCATION (0 = gleich wie port; 80 wenn Apache2-Proxy)
 
 upnp:
   name: "EchoLox"
@@ -447,12 +456,20 @@ mqtt:
   username: ""
   password: ""
 
-data_dir: ""           # leer = Standard-LoxBerry-Datenpfad
+data_dir: "/opt/loxberry/data/plugins/EchoLox"   # Speicherort für devices.json
 ```
 
 Die Miniserver-IP und Credentials werden automatisch aus `/opt/loxberry/config/system/general.json` gelesen.
 
-**Wichtig:** Die Config liegt im `data/`-Verzeichnis, nicht im `config/`-Verzeichnis, da LoxBerry das `config/`-Verzeichnis bei Plugin-Updates überschreibt.
+**Wichtig:** Sowohl die Config (`EchoLox.cfg`) als auch die Gerätedatenbank (`devices.json`) liegen im `data/`-Verzeichnis — dieses wird bei Plugin-Updates von LoxBerry **nicht** überschrieben. Einstellungen und Geräte bleiben bei Updates erhalten.
+
+---
+
+## Automatische Updates (LoxBerry)
+
+EchoLox unterstützt LoxBerrys eingebaute **Plugin-Autoupdate-Funktion**. LoxBerry prüft regelmäßig die Datei [`release.cfg`](https://raw.githubusercontent.com/BattloXX/EchoLox/main/release.cfg) im GitHub-Repository auf neue Versionen und meldet verfügbare Updates im Plugin Manager.
+
+Die `release.cfg` wird bei jedem Release automatisch durch GitHub Actions aktualisiert. Manuelles Eingreifen ist nicht nötig.
 
 ---
 
@@ -464,13 +481,15 @@ cmd/EchoLox/
 
 internal/
     bridge/
-        bridge.go              # HTTP-Server, Startup-Logik, Port-80-Listener
+        bridge.go              # HTTP-Server, Startup-Logik
         config.go              # YAML-Konfiguration (inkl. discovery_port)
     hue/
         api.go                 # Philips Hue REST API v1.47.0
         state.go               # Brightness/Hue/Sat Konvertierung
     upnp/
         listener.go            # SSDP Multicast-Listener, NOTIFY, description.xml
+        socket_linux.go        # SO_REUSEPORT für Koexistenz mit LoxBerry ssdpd
+        socket_other.go        # Fallback für andere Plattformen
     device/
         model.go               # Device-Struct mit HueID
         manager.go             # CRUD, Persistenz, HueID-Vergabe
@@ -508,25 +527,9 @@ webembed/
             logo.png
 ```
 
-### SSDP-Flow (Alexa-Erkennung)
+### SSDP-Koexistenz mit LoxBerry
 
-```
-Echo Device                    EchoLox (Port 1900 UDP)
-    |-- M-SEARCH (UDP Multicast) -->|
-    |<-- HTTP/1.1 200 OK (Unicast) -|
-    |     LOCATION: http://<ip>:80/description.xml
-    |
-    |  [EchoLox sendet auch proaktiv SSDP NOTIFY alle 30 min]
-    |
-    |-- GET :80/description.xml --->|  (nginx proxy → :8079)
-    |<-- XML (Philips Hue Bridge) --|
-    |
-    |-- POST :80/api (pairing) ---->|
-    |<-- {"success":{"username":..}}|
-    |
-    |-- GET :80/api/{user}/lights -->|
-    |<-- { "1": {...}, "2": {...} } -|
-```
+EchoLox bindet UDP-Port 1900 mit `SO_REUSEPORT` und `SO_REUSEADDR`, sodass es neben dem LoxBerry-eigenen `ssdpd` auf demselben Port lauschen kann — ohne Konflikte und ohne dass einer der beiden Dienste gestoppt werden muss.
 
 ### Hue API (implementierte Endpunkte)
 
@@ -570,7 +573,15 @@ GOOS=linux GOARCH=amd64       go build -o bin/EchoLox-amd64  ./cmd/EchoLox
 
 ### CI/CD
 
-Bei jedem Push auf `main` baut GitHub Actions automatisch alle drei Plattformen, inkrementiert die Patch-Version und erstellt ein GitHub-Prerelease mit der Plugin-ZIP.
+Bei jedem Push auf `main` baut GitHub Actions automatisch alle drei Plattformen, inkrementiert die Patch-Version und erstellt ein **stabiles GitHub-Release** mit der Plugin-ZIP. `release.cfg` wird nach jedem Release automatisch aktualisiert, damit LoxBerry die neue Version via Autoupdate anbieten kann.
+
+Einen **Prerelease** erstellen (z.B. für Vorabtests):
+
+```bash
+gh workflow run release.yml --field prerelease=true
+```
+
+Oder im GitHub Actions UI: **Actions → Build & Release → Run workflow → "Create as prerelease" aktivieren**.
 
 ---
 
@@ -584,20 +595,20 @@ Bei jedem Push auf `main` baut GitHub Actions automatisch alle drei Plattformen,
 
 2. **description.xml erreichbar?**
    ```
-   http://<loxberry-ip>:80/description.xml   # wenn nginx-Proxy läuft
+   http://<loxberry-ip>:80/description.xml   # via Apache2-Proxy
    http://<loxberry-ip>:8079/description.xml  # direkt
    ```
    Muss ein XML mit `Philips hue bridge 2015` zurückgeben.
 
-3. **Discovery-Port korrekt?** — Einstellungen → Discovery-Port.  
-   - `80`: nginx-Proxy muss laufen  
+3. **Discovery-Port korrekt?** — Einstellungen → Discovery-Port.
+   - `80`: Apache2-Proxy muss laufen
    - `0` / `8079`: Alexa (neue Firmware) findet die Bridge möglicherweise nicht
 
 4. **Apache2-Proxy Status** — im LoxBerry-Installationslog:
    ```
-   <OK> EchoLox Apache2 proxy configured (port 80 -> 8079 for Hue API)
+   <OK> EchoLox Apache2 proxy configured (port 80 -> 8079 for Hue API + UI)
    ```
-   Falls nicht vorhanden: Proxy manuell einrichten (Anleitung auf `/ui/logs.html`).
+   Falls nicht vorhanden: Proxy manuell einrichten (Anleitung im Abschnitt [Alexa-Erkennung](#alexa-erkennung)).
 
 5. **Gleicher Subnetz?** Echo und LoxBerry müssen im selben Subnetz sein.
 
@@ -606,14 +617,11 @@ Bei jedem Push auf `main` baut GitHub Actions automatisch alle drei Plattformen,
    iptables -A INPUT -p udp --dport 1900 -j ACCEPT
    ```
 
-7. **SSDP-Konflikt?** Prüfen ob Port 1900 bereits belegt ist:
+7. **Port 1900 belegt?** Prüfen welche Prozesse auf Port 1900 lauschen:
    ```bash
    ss -ulnp | grep 1900
    ```
-   Falls `avahi-daemon` oder `miniupnpd` den Port belegen:
-   ```bash
-   systemctl stop avahi-daemon && systemctl disable avahi-daemon
-   ```
+   EchoLox nutzt `SO_REUSEPORT` und kann Port 1900 mit LoxBerrys eigenem `ssdpd` **gleichzeitig** verwenden — kein Konflikt, kein Stoppen nötig.
 
 ### Alexa erkennt Geräte, aber Befehle kommen nicht an
 
@@ -635,7 +643,14 @@ LBHOMEDIR=/opt/loxberry \
 
 ### Geräte nach Update weg
 
-EchoLox speichert `devices.json` im **Datenpfad** (`/opt/loxberry/data/plugins/EchoLox/`), nicht im Config-Pfad. Das Datenpfad-Verzeichnis wird bei Updates nicht gelöscht. Falls Geräte dennoch fehlen, war evtl. eine alte Version installiert, die noch den Config-Pfad verwendete — die Migration erfolgt automatisch beim nächsten Plugin-Install.
+EchoLox speichert `devices.json` im **Datenpfad** (`/opt/loxberry/data/plugins/EchoLox/`). Dieser Pfad wird von LoxBerry bei Plugin-Updates nicht gelöscht. Zusätzlich sichert das Update-Script `devices.json` vor dem Update nach `/tmp/EchoLox_devices.bak` und stellt sie danach automatisch wieder her, falls sie verloren gegangen sein sollte.
+
+Falls Geräte trotzdem fehlen:
+```bash
+# Backup manuell einspielen (falls vorhanden):
+cp /tmp/EchoLox_devices.bak /opt/loxberry/data/plugins/EchoLox/devices.json
+systemctl restart echolox.service
+```
 
 ---
 
@@ -648,10 +663,10 @@ Ja. Alle Echos im gleichen Netzwerk finden die Bridge automatisch.
 Alexa meldet "Gerät nicht erreichbar". Loxone selbst läuft unabhängig weiter.
 
 **Kann ich EchoLox ohne LoxBerry verwenden?**  
-Ja, als Standalone-Binary. Miniserver-Credentials manuell in `EchoLox.cfg` eintragen. Auf Port 80 gebundene Geräte können EchoLox direkt auf Port 80 betreiben (kein nginx nötig).
+Ja, als Standalone-Binary. Miniserver-Credentials manuell in `EchoLox.cfg` eintragen. Wenn EchoLox direkt auf Port 80 läuft (z.B. mit Root-Rechten oder `CAP_NET_BIND_SERVICE`), ist kein Apache2-Proxy nötig.
 
 **Warum Discovery-Port 80 und nicht direkt Port 8079?**  
-Neuere Alexa-Firmware ignoriert SSDP-Antworten mit nicht-Standard-Ports (nicht 80). Der nginx-Proxy leitet die spezifischen Hue-API-Pfade transparent zu EchoLox weiter, ohne andere LoxBerry-Funktionen zu beeinflussen.
+Neuere Alexa-Firmware ignoriert SSDP-Antworten mit nicht-Standard-Ports (nicht 80). Der Apache2-Proxy leitet die spezifischen Hue-API-Pfade transparent zu EchoLox weiter, ohne andere LoxBerry-Funktionen zu beeinflussen.
 
 **Wird HTTPS unterstützt?**  
 Nein. Die Hue-API funktioniert nur über HTTP (wie die echte Bridge).
