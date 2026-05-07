@@ -11,6 +11,13 @@ const (
 	TypeScene  DeviceType = "scene"
 )
 
+type SwitchMode string
+
+const (
+	SwitchModeOnOff   SwitchMode = "onoff"
+	SwitchModeImpulse SwitchMode = "impulse"
+)
+
 type SentRecord struct {
 	Value string    `json:"value"`
 	At    time.Time `json:"at"`
@@ -23,6 +30,7 @@ type Device struct {
 	HueID         string                `json:"hue_id"`
 	Name          string                `json:"name"`
 	Type          DeviceType            `json:"type"`
+	SwitchMode    SwitchMode            `json:"switch_mode,omitempty"`
 	VirtualInputs map[string]string     `json:"virtual_inputs"`
 	Transport     string                `json:"transport"`
 	LastSent      map[string]SentRecord `json:"last_sent,omitempty"`

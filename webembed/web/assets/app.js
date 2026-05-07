@@ -40,10 +40,12 @@ async function loadDevices() {
     const vis = Object.entries(d.virtual_inputs || {})
       .map(([k,v]) => `<span style="font-family:monospace;font-size:0.85em">${v}</span>`)
       .join('<br>');
+    const modeLabel = d.switch_mode === 'impulse' ? '<span class="type-badge" style="background:#7c6">Impuls</span>' : '<span class="type-badge" style="background:#68a">Ein/Aus</span>';
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${d.name}</td>
       <td><span class="type-badge">${d.type}</span></td>
+      <td>${d.type !== 'scene' ? modeLabel : '—'}</td>
       <td>${d.transport || 'http'}</td>
       <td>${vis}</td>
       <td>
@@ -77,18 +79,48 @@ function initDeviceForm() {
   const nameEl = document.getElementById('name');
   const typeEl = document.getElementById('type');
   const transportEl = document.getElementById('transport');
+  const switchModeEl = document.getElementById('switchMode');
+  const switchModeGroup = document.getElementById('switchModeGroup');
+  const switchModeHint = document.getElementById('switchModeHint');
+
+  function updateSwitchModeVisibility() {
+    if (!switchModeGroup) return;
+    const type = typeEl.value;
+    switchModeGroup.style.display = type === 'scene' ? 'none' : '';
+    if (switchModeEl && switchModeHint) {
+      switchModeHint.textContent = switchModeEl.value === 'impulse'
+        ? 'Impuls: "_on"-VI bekommt "Impuls" (Ein), "_off"-VI bekommt "Impuls" (Aus).'
+        : 'Ein/Aus: ein einziger VI — bekommt 1 (Ein) oder 0 (Aus).';
+    }
+  }
 
   function updatePreview() {
     const name = nameEl.value;
     const type = typeEl.value;
+    const switchMode = switchModeEl ? switchModeEl.value : 'onoff';
     const preview = document.getElementById('viPreview');
     if (!name) { preview.innerHTML = '<em>Bitte Name eingeben</em>'; return; }
-    const vis = generateVIs(name, type);
-    preview.innerHTML = vis.map(v => `<div>${v}</div>`).join('');
+    const vis = generateVIs(name, type, switchMode);
+    const impulse = switchMode === 'impulse';
+    preview.innerHTML = vis.map(v => {
+      if (impulse) {
+        const hint = v.endsWith('_on') ? ' <em style="color:#888;font-size:0.85em">→ Impuls bei Ein</em>'
+                   : v.endsWith('_off') ? ' <em style="color:#888;font-size:0.85em">→ Impuls bei Aus</em>'
+                   : '';
+        return `<div>${v}${hint}</div>`;
+      } else {
+        const hint = (type !== 'scene' && !v.includes('_brightness') && !v.includes('_hue') && !v.includes('_saturation'))
+          ? ' <em style="color:#888;font-size:0.85em">→ 1 / 0</em>' : '';
+        return `<div>${v}${hint}</div>`;
+      }
+    }).join('');
   }
 
   nameEl.addEventListener('input', updatePreview);
-  typeEl.addEventListener('change', updatePreview);
+  typeEl.addEventListener('change', () => { updateSwitchModeVisibility(); updatePreview(); });
+  if (switchModeEl) switchModeEl.addEventListener('change', () => { updateSwitchModeVisibility(); updatePreview(); });
+
+  updateSwitchModeVisibility();
 
   if (id) {
     currentDeviceId = id;
@@ -99,6 +131,8 @@ function initDeviceForm() {
       nameEl.value = d.name;
       typeEl.value = d.type;
       transportEl.value = d.transport || 'http';
+      if (switchModeEl) switchModeEl.value = d.switch_mode || 'onoff';
+      updateSwitchModeVisibility();
       updatePreview();
     });
   }
@@ -109,6 +143,7 @@ function initDeviceForm() {
       name: nameEl.value,
       type: typeEl.value,
       transport: transportEl.value,
+      switch_mode: switchModeEl ? switchModeEl.value : 'onoff',
     };
     if (id) {
       body.id = id;
@@ -168,13 +203,14 @@ function normalizeName(name) {
   return r;
 }
 
-function generateVIs(name, type) {
+function generateVIs(name, type, switchMode) {
   const n = normalizeName(name);
   const p = 'echolox_' + n;
+  const impulse = switchMode === 'impulse';
   switch (type) {
-    case 'switch': return [`${p}_on`, `${p}_off`];
-    case 'dimmer': return [`${p}_on`, `${p}_off`, `${p}_brightness`];
-    case 'color':  return [`${p}_on`, `${p}_off`, `${p}_brightness`, `${p}_hue`, `${p}_saturation`];
+    case 'switch': return impulse ? [`${p}_on`, `${p}_off`] : [p];
+    case 'dimmer': return impulse ? [`${p}_on`, `${p}_off`, `${p}_brightness`] : [p, `${p}_brightness`];
+    case 'color':  return impulse ? [`${p}_on`, `${p}_off`, `${p}_brightness`, `${p}_hue`, `${p}_saturation`] : [p, `${p}_brightness`, `${p}_hue`, `${p}_saturation`];
     case 'scene':  return [`${p}_activate`];
     default: return [];
   }

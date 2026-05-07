@@ -106,7 +106,7 @@ func (m *Manager) Create(d *Device) error {
 		m.nextHue++
 	}
 	if len(d.VirtualInputs) == 0 {
-		d.VirtualInputs = GenerateVirtualInputs(d.Name, d.Type)
+		d.VirtualInputs = GenerateVirtualInputs(d.Name, d.Type, d.SwitchMode)
 	}
 	if d.LastSent == nil {
 		d.LastSent = map[string]SentRecord{}

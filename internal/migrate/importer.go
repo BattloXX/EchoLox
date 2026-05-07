@@ -75,7 +75,7 @@ func MapDevice(old OldDevice) (*device.Device, string) {
 	d := &device.Device{
 		Name:          old.Name,
 		Type:          dtype,
-		VirtualInputs: device.GenerateVirtualInputs(old.Name, dtype),
+		VirtualInputs: device.GenerateVirtualInputs(old.Name, dtype, device.SwitchModeOnOff),
 		Transport:     "http",
 	}
 	return d, ""

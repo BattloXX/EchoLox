@@ -186,19 +186,28 @@ func (a *API) handleStateChange(w http.ResponseWriter, r *http.Request, d *devic
 
 	if body.On != nil {
 		state.On = *body.On
-		if *body.On {
+		if d.SwitchMode == device.SwitchModeImpulse {
+			// Impuls: _on-VI bei Ein, _off-VI bei Aus
+			if *body.On {
+				if vi, ok := d.VirtualInputs["on"]; ok {
+					a.send(d.ID, vi, "Impuls")
+				}
+			} else {
+				if vi, ok := d.VirtualInputs["off"]; ok {
+					a.send(d.ID, vi, "Impuls")
+				}
+			}
+		} else {
+			// Ein/Aus: ein einziger VI, 1 = ein, 0 = aus
 			if vi, ok := d.VirtualInputs["on"]; ok {
-				a.send(d.ID, vi, "1")
+				if *body.On {
+					a.send(d.ID, vi, "1")
+				} else {
+					a.send(d.ID, vi, "0")
+				}
 			}
 			if vi, ok := d.VirtualInputs["activate"]; ok {
 				a.send(d.ID, vi, "1")
-			}
-		} else {
-			if vi, ok := d.VirtualInputs["off"]; ok {
-				a.send(d.ID, vi, "1")
-			} else if vi, ok := d.VirtualInputs["on"]; ok {
-				// backward compat: devices without off VI get on=0
-				a.send(d.ID, vi, "0")
 			}
 		}
 		responses = append(responses, success(prefix+"on", *body.On))

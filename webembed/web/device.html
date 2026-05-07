@@ -45,6 +45,14 @@
           <option value="mqtt">MQTT</option>
         </select>
       </div>
+      <div class="form-group" id="switchModeGroup">
+        <label>Schaltmodus</label>
+        <select id="switchMode" name="switch_mode">
+          <option value="onoff">Ein/Aus</option>
+          <option value="impulse">Impuls (Pulse)</option>
+        </select>
+        <small id="switchModeHint" style="color:#888;display:block;margin-top:4px"></small>
+      </div>
       <div class="form-group">
         <label>Virtual Input Namen (auto-generiert)</label>
         <div id="viPreview" class="vi-preview"><em>Bitte Name eingeben</em></div>

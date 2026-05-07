@@ -26,21 +26,34 @@ func NormalizeName(name string) string {
 	return result
 }
 
-func GenerateVirtualInputs(name string, dtype DeviceType) map[string]string {
+func GenerateVirtualInputs(name string, dtype DeviceType, mode SwitchMode) map[string]string {
 	n := NormalizeName(name)
 	prefix := "echolox_" + n
 	m := map[string]string{}
+	impulse := mode == SwitchModeImpulse
 	switch dtype {
 	case TypeSwitch:
-		m["on"] = prefix + "_on"
-		m["off"] = prefix + "_off"
+		if impulse {
+			m["on"] = prefix + "_on"
+			m["off"] = prefix + "_off"
+		} else {
+			m["on"] = prefix
+		}
 	case TypeDimmer:
-		m["on"] = prefix + "_on"
-		m["off"] = prefix + "_off"
+		if impulse {
+			m["on"] = prefix + "_on"
+			m["off"] = prefix + "_off"
+		} else {
+			m["on"] = prefix
+		}
 		m["brightness"] = prefix + "_brightness"
 	case TypeColor:
-		m["on"] = prefix + "_on"
-		m["off"] = prefix + "_off"
+		if impulse {
+			m["on"] = prefix + "_on"
+			m["off"] = prefix + "_off"
+		} else {
+			m["on"] = prefix
+		}
 		m["brightness"] = prefix + "_brightness"
 		m["hue"] = prefix + "_hue"
 		m["saturation"] = prefix + "_saturation"

@@ -127,7 +127,9 @@ func (h *Handler) handleTest(w http.ResponseWriter, r *http.Request, id string) 
 	errors := map[string]string{}
 	for key, vi := range d.VirtualInputs {
 		val := "1"
-		if key == "brightness" {
+		if d.SwitchMode == device.SwitchModeImpulse && (key == "on" || key == "off") {
+			val = "Impuls"
+		} else if key == "brightness" {
 			val = "50"
 		}
 		if err := h.lox.Send(vi, val); err != nil {
