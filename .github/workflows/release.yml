@@ -5,6 +5,12 @@ on:
     branches: [main]
     paths-ignore:
       - 'release.cfg'
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: 'Create as prerelease'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -64,9 +70,14 @@ jobs:
         run: |
           V="${{ steps.ver.outputs.version }}"
           COMMIT_MSG=$(git log -1 --pretty='%s')
+          PRERELEASE_FLAG=""
+          if [ "${{ inputs.prerelease }}" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
           gh release create "v$V" \
             --title "EchoLox v$V" \
             --notes "$(printf 'Automatischer Build von \`main\`\n\n**Commit:** %s' "$COMMIT_MSG")" \
+            $PRERELEASE_FLAG \
             "EchoLox-$V.zip"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
