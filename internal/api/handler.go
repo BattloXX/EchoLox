@@ -213,7 +213,7 @@ type configYAML struct {
 	Server struct {
 		Port          int    `yaml:"port"`
 		IP            string `yaml:"ip,omitempty"`
-		DiscoveryPort int    `yaml:"discovery_port,omitempty"`
+		DiscoveryPort int    `yaml:"discovery_port"`
 	} `yaml:"server"`
 	UPNP struct {
 		Name string `yaml:"name,omitempty"`
@@ -386,13 +386,13 @@ func (h *Handler) backupList(w http.ResponseWriter) {
 func (h *Handler) backupCreateLocal(w http.ResponseWriter) {
 	backupDir := filepath.Join(h.dataDir, "backup")
 	if err := os.MkdirAll(backupDir, 0755); err != nil {
-		http.Error(w, err.Error(), 500)
+		writeErr(w, 500, err)
 		return
 	}
 	ts := time.Now().Format("20060102_150405")
 	zipPath := filepath.Join(backupDir, "echolox_backup_"+ts+".zip")
 	if err := h.writeBackupZip(zipPath); err != nil {
-		http.Error(w, err.Error(), 500)
+		writeErr(w, 500, err)
 		return
 	}
 	writeJSON(w, map[string]string{"status": "ok", "timestamp": ts, "file": filepath.Base(zipPath)})
@@ -459,13 +459,13 @@ func (h *Handler) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 	r.ParseMultipartForm(10 << 20)
 	file, _, err := r.FormFile("backup")
 	if err != nil {
-		http.Error(w, "backup-Datei erforderlich: "+err.Error(), 400)
+		writeErr(w, 400, fmt.Errorf("backup-Datei erforderlich: %w", err))
 		return
 	}
 	defer file.Close()
 	data, err := io.ReadAll(file)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		writeErr(w, 500, err)
 		return
 	}
 	h.restoreFromZipBytes(w, data)
@@ -481,18 +481,18 @@ func (h *Handler) handleBackupRestoreLocal(w http.ResponseWriter, r *http.Reques
 		File string `json:"file"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.File == "" {
-		http.Error(w, "file erforderlich", 400)
+		writeErr(w, 400, fmt.Errorf("file erforderlich"))
 		return
 	}
 	// Prevent path traversal
 	if strings.Contains(req.File, "/") || strings.Contains(req.File, "\\") {
-		http.Error(w, "ungültiger Dateiname", 400)
+		writeErr(w, 400, fmt.Errorf("ungültiger Dateiname"))
 		return
 	}
 	zipPath := filepath.Join(h.dataDir, "backup", req.File)
 	data, err := os.ReadFile(zipPath)
 	if err != nil {
-		http.Error(w, "Datei nicht gefunden: "+err.Error(), 404)
+		writeErr(w, 404, fmt.Errorf("Datei nicht gefunden: %w", err))
 		return
 	}
 	h.restoreFromZipBytes(w, data)
@@ -508,16 +508,16 @@ func (h *Handler) handleBackupDelete(w http.ResponseWriter, r *http.Request) {
 		File string `json:"file"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.File == "" {
-		http.Error(w, "file erforderlich", 400)
+		writeErr(w, 400, fmt.Errorf("file erforderlich"))
 		return
 	}
 	if strings.Contains(req.File, "/") || strings.Contains(req.File, "\\") {
-		http.Error(w, "ungültiger Dateiname", 400)
+		writeErr(w, 400, fmt.Errorf("ungültiger Dateiname"))
 		return
 	}
 	zipPath := filepath.Join(h.dataDir, "backup", req.File)
 	if err := os.Remove(zipPath); err != nil {
-		http.Error(w, err.Error(), 500)
+		writeErr(w, 500, err)
 		return
 	}
 	writeJSON(w, map[string]string{"status": "ok"})
@@ -526,7 +526,7 @@ func (h *Handler) handleBackupDelete(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) restoreFromZipBytes(w http.ResponseWriter, data []byte) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		http.Error(w, "ungültige ZIP-Datei: "+err.Error(), 400)
+		writeErr(w, 400, fmt.Errorf("ungültige ZIP-Datei: %w", err))
 		return
 	}
 	restored := []string{}
@@ -556,7 +556,7 @@ func (h *Handler) restoreFromZipBytes(w http.ResponseWriter, data []byte) {
 		}
 	}
 	if len(restored) == 0 {
-		http.Error(w, "keine bekannten Dateien im Backup gefunden", 400)
+		writeErr(w, 400, fmt.Errorf("keine bekannten Dateien im Backup gefunden"))
 		return
 	}
 	writeJSON(w, map[string]interface{}{"status": "ok", "restored": restored})
@@ -646,4 +646,10 @@ func setCORS(w http.ResponseWriter) {
 func writeJSON(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
+}
+
+func writeErr(w http.ResponseWriter, code int, err error) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }

@@ -30,6 +30,8 @@ chmod +x "$LBPBINDIR/EchoLox"
 
 # ── Create/migrate user config into data dir (survives updates) ─────────────
 mkdir -p "$LBPDATADIR"
+mkdir -p "$LBPLOGDIR"
+chown -R loxberry:loxberry "$LBPDATADIR" "$LBPLOGDIR" 2>/dev/null || true
 if [ ! -f "$CFGFILE" ]; then
   # Migrate from old location (config dir) if present
   if [ -f "$LBPCFGDIR/EchoLox.cfg" ]; then
@@ -90,18 +92,20 @@ else
     echo "<WARN> EchoLox: apache2 not found — configure proxy manually for Alexa discovery"
 fi
 
-# If proxy was configured, set discovery_port: 80 in EchoLox config
+# If proxy was configured and discovery_port is not yet set, add it.
+# Never overwrite an existing value — the user may have changed it intentionally.
 if [ "$PROXY_OK" -eq 1 ] && command -v python3 >/dev/null 2>&1; then
     python3 -c "
-import re
+import re, sys
 with open('$CFGFILE') as f:
     content = f.read()
-content = re.sub(r'discovery_port:\s*0', 'discovery_port: 80', content)
 if 'discovery_port:' not in content:
     content = re.sub(r'(  port:[^\n]*\n)', r'\1  discovery_port: 80\n', content, count=1)
-with open('$CFGFILE', 'w') as f:
-    f.write(content)
-print('<OK> EchoLox discovery_port set to 80')
+    with open('$CFGFILE', 'w') as f:
+        f.write(content)
+    print('<OK> EchoLox discovery_port set to 80')
+else:
+    print('<OK> EchoLox discovery_port already set, not changed')
 " 2>/dev/null || echo "<WARN> EchoLox: could not update discovery_port in config"
 fi
 
