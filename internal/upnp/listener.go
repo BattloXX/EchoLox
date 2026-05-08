@@ -91,7 +91,9 @@ func (l *Listener) isMSearch(msg string) bool {
 	return strings.Contains(strings.ToLower(msg), "ssdp:discover")
 }
 
-// respond sends a unicast 200 OK via a dedicated ephemeral socket.
+// respond sends unicast SSDP 200 OK responses for all three UPnP service types.
+// Real Hue bridges send rootdevice + uuid + Basic:1; sending only Basic:1 causes
+// missed discovery on some Alexa firmware versions.
 func (l *Listener) respond(src *net.UDPAddr) {
 	conn, err := net.DialUDP("udp4", nil, src)
 	if err != nil {
@@ -99,34 +101,36 @@ func (l *Listener) respond(src *net.UDPAddr) {
 		return
 	}
 	defer conn.Close()
-	// Send twice for UDP reliability (first packet may be dropped)
-	for i := 0; i < 2; i++ {
-		if i > 0 {
-			time.Sleep(100 * time.Millisecond)
-		}
-		if _, err := conn.Write([]byte(l.buildResponse())); err != nil {
+	for _, resp := range l.buildResponses() {
+		if _, err := conn.Write([]byte(resp)); err != nil {
 			logbuf.Global.Debug("SSDP unicast write: %v", err)
 			return
 		}
+		time.Sleep(50 * time.Millisecond)
 	}
 	logbuf.Global.Debug("SSDP 200 OK sent to %s", src)
 }
 
-// buildResponse returns the SSDP 200 OK Alexa expects.
-func (l *Listener) buildResponse() string {
+// buildResponses returns the three SSDP 200 OK messages a Hue bridge sends.
+func (l *Listener) buildResponses() []string {
 	fullUUID := uuidPrefix + l.info.Suffix
-	return "HTTP/1.1 200 OK\r\n" +
+	header := "HTTP/1.1 200 OK\r\n" +
 		"CACHE-CONTROL: max-age=100\r\n" +
 		"EXT:\r\n" +
 		"LOCATION: " + l.location() + "\r\n" +
 		"SERVER: Linux/3.14.0 UPnP/1.0 IpBridge/" + apiVersion + "\r\n" +
-		"ST: urn:schemas-upnp-org:device:Basic:1\r\n" +
-		"USN: uuid:" + fullUUID + "::urn:schemas-upnp-org:device:Basic:1\r\n" +
-		"hue-bridgeid: " + l.info.BridgeID + "\r\n" +
-		"\r\n"
+		"hue-bridgeid: " + l.info.BridgeID + "\r\n"
+	return []string{
+		header + "ST: upnp:rootdevice\r\n" +
+			"USN: uuid:" + fullUUID + "::upnp:rootdevice\r\n\r\n",
+		header + "ST: uuid:" + fullUUID + "\r\n" +
+			"USN: uuid:" + fullUUID + "\r\n\r\n",
+		header + "ST: urn:schemas-upnp-org:device:Basic:1\r\n" +
+			"USN: uuid:" + fullUUID + "::urn:schemas-upnp-org:device:Basic:1\r\n\r\n",
+	}
 }
 
-// sendNotify broadcasts an SSDP NOTIFY so Alexa can find the bridge without M-SEARCH.
+// sendNotify broadcasts SSDP NOTIFY for all three UPnP service types.
 func (l *Listener) sendNotify() {
 	ssdpUDPAddr, err := net.ResolveUDPAddr("udp4", ssdpAddr)
 	if err != nil {
@@ -139,21 +143,28 @@ func (l *Listener) sendNotify() {
 	}
 	defer conn.Close()
 	fullUUID := uuidPrefix + l.info.Suffix
-	notify := "NOTIFY * HTTP/1.1\r\n" +
-		"HOST: 239.255.255.250:1900\r\n" +
-		"CACHE-CONTROL: max-age=1800\r\n" +
-		"LOCATION: " + l.location() + "\r\n" +
-		"NT: urn:schemas-upnp-org:device:Basic:1\r\n" +
-		"NTS: ssdp:alive\r\n" +
-		"SERVER: Linux/3.14.0 UPnP/1.0 IpBridge/" + apiVersion + "\r\n" +
-		"USN: uuid:" + fullUUID + "::urn:schemas-upnp-org:device:Basic:1\r\n" +
-		"hue-bridgeid: " + l.info.BridgeID + "\r\n" +
-		"\r\n"
-	if _, err := conn.Write([]byte(notify)); err != nil {
-		logbuf.Global.Debug("SSDP NOTIFY write error: %v", err)
-	} else {
-		logbuf.Global.Info("SSDP NOTIFY sent (LOCATION: %s)", l.location())
+	notifies := []struct{ nt, usn string }{
+		{"upnp:rootdevice", "uuid:" + fullUUID + "::upnp:rootdevice"},
+		{"uuid:" + fullUUID, "uuid:" + fullUUID},
+		{"urn:schemas-upnp-org:device:Basic:1", "uuid:" + fullUUID + "::urn:schemas-upnp-org:device:Basic:1"},
 	}
+	for _, n := range notifies {
+		msg := "NOTIFY * HTTP/1.1\r\n" +
+			"HOST: 239.255.255.250:1900\r\n" +
+			"CACHE-CONTROL: max-age=1800\r\n" +
+			"LOCATION: " + l.location() + "\r\n" +
+			"NT: " + n.nt + "\r\n" +
+			"NTS: ssdp:alive\r\n" +
+			"SERVER: Linux/3.14.0 UPnP/1.0 IpBridge/" + apiVersion + "\r\n" +
+			"USN: " + n.usn + "\r\n" +
+			"hue-bridgeid: " + l.info.BridgeID + "\r\n" +
+			"\r\n"
+		if _, err := conn.Write([]byte(msg)); err != nil {
+			logbuf.Global.Debug("SSDP NOTIFY write error: %v", err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	logbuf.Global.Info("SSDP NOTIFY sent (3 types, LOCATION: %s)", l.location())
 }
 
 // RegisterDescription registers /description.xml and icon stubs on the HTTP mux.
@@ -178,6 +189,8 @@ func buildDescriptionXML(info identity.BridgeInfo) string {
 		dPort = info.Port
 	}
 	urlBase := fmt.Sprintf("http://%s:%d/", info.IP, dPort)
+	// serialNumber = MAC without colons (12 uppercase hex chars), not the 16-char bridgeID
+	serial := strings.ToUpper(strings.ReplaceAll(info.MAC, ":", ""))
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <root xmlns="urn:schemas-upnp-org:device-1-0">
   <specVersion>
@@ -214,7 +227,7 @@ func buildDescriptionXML(info identity.BridgeInfo) string {
       </icon>
     </iconList>
   </device>
-</root>`, urlBase, info.IP, modelID, info.BridgeID, fullUUID)
+</root>`, urlBase, info.IP, modelID, serial, fullUUID)
 }
 
 func firstLine(s string) string {
