@@ -10,19 +10,19 @@ import (
 	"unsafe"
 )
 
-const soReusePort = 0xf // SO_REUSEPORT (Linux, all arches)
-
-// listenMulticast binds to UDP 0.0.0.0:1900 with SO_REUSEPORT so EchoLox can
+// listenMulticast binds to UDP 0.0.0.0:1900 with SO_REUSEADDR so EchoLox can
 // coexist with the LoxBerry system ssdpd that already holds port 1900.
-// localIP pins the multicast group join to a specific interface — same pattern
-// as HA's IP_ADD_MEMBERSHIP + host_ip_addr, which fixes missed M-SEARCH packets
-// on multi-homed systems (e.g. Pi with both eth0 and wlan0 active).
+// SO_REUSEADDR (not SO_REUSEPORT) is used because SO_REUSEADDR delivers a copy
+// of each multicast packet to every joined socket, whereas SO_REUSEPORT
+// load-balances to exactly one socket — which would mean EchoLox never sees
+// M-SEARCH packets when LoxBerry's ssdpd is also running.
+// SO_BROADCAST + IP_MULTICAST_IF mirror HA's emulated_hue socket setup.
 func listenMulticast(localIP net.IP) (*net.UDPConn, error) {
 	lc := net.ListenConfig{
 		Control: func(_, _ string, c syscall.RawConn) error {
 			return c.Control(func(fd uintptr) {
 				syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
-				syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, soReusePort, 1)
+				syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1)
 			})
 		},
 	}
@@ -44,9 +44,24 @@ func listenMulticast(localIP net.IP) (*net.UDPConn, error) {
 		Multiaddr: [4]byte{239, 255, 255, 250},
 		Interface: [4]byte{lip[0], lip[1], lip[2], lip[3]},
 	}
-	var joinErr syscall.Errno
+	var setErr error
 	raw.Control(func(fd uintptr) {
-		_, _, joinErr = syscall.Syscall6(
+		// IP_MULTICAST_IF: outbound multicast on the correct interface (HA pattern)
+		_, _, errno := syscall.Syscall6(
+			syscall.SYS_SETSOCKOPT,
+			fd,
+			syscall.IPPROTO_IP,
+			syscall.IP_MULTICAST_IF,
+			uintptr(unsafe.Pointer(&mreq.Interface)),
+			4,
+			0,
+		)
+		if errno != 0 {
+			setErr = fmt.Errorf("IP_MULTICAST_IF: %w", errno)
+			return
+		}
+		// IP_ADD_MEMBERSHIP: receive multicast on this interface
+		_, _, errno = syscall.Syscall6(
 			syscall.SYS_SETSOCKOPT,
 			fd,
 			syscall.IPPROTO_IP,
@@ -55,10 +70,13 @@ func listenMulticast(localIP net.IP) (*net.UDPConn, error) {
 			unsafe.Sizeof(mreq),
 			0,
 		)
+		if errno != 0 {
+			setErr = fmt.Errorf("IP_ADD_MEMBERSHIP: %w", errno)
+		}
 	})
-	if joinErr != 0 {
+	if setErr != nil {
 		conn.Close()
-		return nil, fmt.Errorf("join multicast group: %w", joinErr)
+		return nil, setErr
 	}
 	return conn, nil
 }
