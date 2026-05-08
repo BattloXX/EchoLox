@@ -120,10 +120,17 @@ func (m *Manager) Create(d *Device) error {
 func (m *Manager) Update(d *Device) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	// Keep old HueID if not supplied
-	if old, ok := m.byID[d.ID]; ok && d.HueID == "" {
-		d.HueID = old.HueID
+	if old, ok := m.byID[d.ID]; ok {
+		if d.HueID == "" {
+			d.HueID = old.HueID
+		}
+		// Carry over LastSent so history survives an edit
+		if d.LastSent == nil {
+			d.LastSent = old.LastSent
+		}
 	}
+	// Always regenerate VIs to stay in sync with name/type/switchMode changes
+	d.VirtualInputs = GenerateVirtualInputs(d.Name, d.Type, d.SwitchMode)
 	m.byID[d.ID] = d
 	m.byHueID[d.HueID] = d
 	return m.persist()

@@ -120,7 +120,7 @@ Erwartete Antwort: XML mit `Philips hue bridge 2015`.
 
 ### 1. Miniserver-Verbindung prüfen
 
-**EchoLox → Einstellungen** (`/ui/settings.html`) öffnen.
+**EchoLox → Einstellungen** (`/echoloxui/settings.html`) öffnen.
 
 - Miniserver wird automatisch aus der LoxBerry-Konfiguration gelesen — keine manuelle Eingabe nötig
 - Dropdown: gewünschten Miniserver auswählen (bei mehreren konfigurierten)
@@ -225,8 +225,8 @@ Das Installations-Script richtet automatisch einen **Apache2-Proxy** ein (`/etc/
 ```apache
 ProxyPreserveHost On
 # EchoLox Web-UI und Management-API
-ProxyPass /ui/ http://127.0.0.1:8079/ui/
-ProxyPassReverse /ui/ http://127.0.0.1:8079/ui/
+ProxyPass /echoloxui/ http://127.0.0.1:8079/echoloxui/
+ProxyPassReverse /echoloxui/ http://127.0.0.1:8079/echoloxui/
 ProxyPass /echolox/ http://127.0.0.1:8079/echolox/
 ProxyPassReverse /echolox/ http://127.0.0.1:8079/echolox/
 # Philips Hue API-Pfade für Alexa
@@ -238,8 +238,8 @@ ProxyPassMatch ^(/api(/.*)?|/description\.xml|/hue_logo[^/]*)$ http://127.0.0.1:
 ```bash
 cat > /etc/apache2/conf-available/echolox-hue.conf << 'EOF'
 ProxyPreserveHost On
-ProxyPass /ui/ http://127.0.0.1:8079/ui/
-ProxyPassReverse /ui/ http://127.0.0.1:8079/ui/
+ProxyPass /echoloxui/ http://127.0.0.1:8079/echoloxui/
+ProxyPassReverse /echoloxui/ http://127.0.0.1:8079/echoloxui/
 ProxyPass /echolox/ http://127.0.0.1:8079/echolox/
 ProxyPassReverse /echolox/ http://127.0.0.1:8079/echolox/
 ProxyPassMatch ^(/api(/.*)?|/description\.xml|/hue_logo[^/]*)$ http://127.0.0.1:8079$1
@@ -324,7 +324,7 @@ Subscriptions werden in `$LBPDATADIR/mqtt_subscriptions.json` gespeichert.
 
 ## Status-Übersicht
 
-**EchoLox → Status** (`/ui/status.html`) — zeigt für jeden Virtual Input:
+**EchoLox → Status** (`/echoloxui/status.html`) — zeigt für jeden Virtual Input:
 
 | Status | Bedeutung |
 |---|---|
@@ -337,7 +337,7 @@ Subscriptions werden in `$LBPDATADIR/mqtt_subscriptions.json` gespeichert.
 
 ## Backup & Restore
 
-**EchoLox → Backup** (`/ui/backup.html`) — sichert:
+**EchoLox → Backup** (`/echoloxui/backup.html`) — sichert:
 
 - `EchoLox.cfg` — alle Einstellungen
 - `devices.json` — alle angelegten Geräte
@@ -355,7 +355,7 @@ Nach Wiederherstellung EchoLox neu starten (**Einstellungen → Dienst neu start
 
 ## Logs & Diagnose
 
-**EchoLox → Logs** (`/ui/logs.html`) — Ring-Buffer mit 2000 Einträgen + optionale Datei (`$LBPLOGDIR/EchoLox.log`).
+**EchoLox → Logs** (`/echoloxui/logs.html`) — Ring-Buffer mit 2000 Einträgen + optionale Datei (`$LBPLOGDIR/EchoLox.log`).
 
 | Level | Was wird geloggt |
 |---|---|
@@ -372,7 +372,7 @@ POST /echolox/api/logs/level       {"level": "debug"} oder {"level": "info"}
 
 ### Diagnose-Workflow (Alexa nicht gefunden)
 
-1. **Debug aktivieren** → `/ui/logs.html`
+1. **Debug aktivieren** → `/echoloxui/logs.html`
 2. "Alexa, suche nach neuen Geräten" sagen
 3. Log prüfen: `SSDP M-SEARCH` vorhanden?
 4. Kein M-SEARCH → gleicher Subnetz? Firewall Port 1900?
@@ -394,7 +394,7 @@ Migration von ha-bridge:
 
 ## Einstellungen
 
-**EchoLox → Einstellungen** (`/ui/settings.html`):
+**EchoLox → Einstellungen** (`/echoloxui/settings.html`):
 
 | Einstellung | Standard | Beschreibung |
 |---|---|---|
@@ -538,7 +538,7 @@ GET/POST /echolox/api/logs                   Logs abrufen/Level setzen
 # Lokaler Build (für Entwicklung)
 go build ./cmd/EchoLox/
 ./EchoLox --config ./data/EchoLox.cfg
-# Web-UI: http://localhost:8079/ui/
+# Web-UI: http://localhost:8079/echoloxui/
 
 # Alle Zielplattformen
 make all
@@ -569,7 +569,7 @@ gh workflow run release.yml --field prerelease=true
 Prüfpunkte in dieser Reihenfolge:
 
 **1. Debug-Logs aktivieren**
-`/ui/logs.html` → Debug aktivieren → "Alexa, suche Geräte" → `SSDP M-SEARCH` im Log vorhanden?
+`/echoloxui/logs.html` → Debug aktivieren → "Alexa, suche Geräte" → `SSDP M-SEARCH` im Log vorhanden?
 
 **2. description.xml erreichbar?**
 ```

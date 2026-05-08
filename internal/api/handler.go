@@ -57,6 +57,7 @@ func (h *Handler) handleDevices(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	switch r.Method {
 	case http.MethodGet:
+		w.Header().Set("Cache-Control", "no-store, no-cache")
 		writeJSON(w, h.mgr.All())
 	case http.MethodPost:
 		var d device.Device
@@ -347,8 +348,8 @@ func (h *Handler) handleRestart(w http.ResponseWriter, r *http.Request) {
 	}
 	go func() {
 		time.Sleep(600 * time.Millisecond)
-		if err := exec.Command("systemctl", "restart", "echolox.service").Run(); err != nil {
-			os.Exit(0) // let systemd restart via Restart=on-failure
+		if err := exec.Command("sudo", "systemctl", "restart", "echolox.service").Run(); err != nil {
+			os.Exit(1) // fallback: non-zero exit triggers systemd Restart=on-failure
 		}
 	}()
 }

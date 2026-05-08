@@ -32,10 +32,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		panic("web static files not found: " + err.Error())
 	}
 	fileServer := http.FileServer(http.FS(sub))
-	mux.Handle("/ui/", http.StripPrefix("/ui", fileServer))
+	mux.Handle("/echoloxui/", http.StripPrefix("/echoloxui", fileServer))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
-			http.Redirect(w, r, "/ui/index.html", http.StatusFound)
+			http.Redirect(w, r, "/echoloxui/index.html", http.StatusFound)
 			return
 		}
 	})

@@ -51,10 +51,17 @@ func (l *Listener) Listen() {
 	// Send NOTIFY announcements on start and every 30 min
 	go func() {
 		time.Sleep(2 * time.Second)
-		l.sendNotify()
-		ticker := time.NewTicker(30 * time.Minute)
-		for range ticker.C {
+		// Send 3 announcements on startup for UDP reliability
+		for i := 0; i < 3; i++ {
 			l.sendNotify()
+			time.Sleep(200 * time.Millisecond)
+		}
+		ticker := time.NewTicker(15 * time.Minute)
+		for range ticker.C {
+			for i := 0; i < 3; i++ {
+				l.sendNotify()
+				time.Sleep(200 * time.Millisecond)
+			}
 		}
 	}()
 
@@ -92,11 +99,17 @@ func (l *Listener) respond(src *net.UDPAddr) {
 		return
 	}
 	defer conn.Close()
-	if _, err := conn.Write([]byte(l.buildResponse())); err != nil {
-		logbuf.Global.Debug("SSDP unicast write: %v", err)
-	} else {
-		logbuf.Global.Debug("SSDP 200 OK sent to %s", src)
+	// Send twice for UDP reliability (first packet may be dropped)
+	for i := 0; i < 2; i++ {
+		if i > 0 {
+			time.Sleep(100 * time.Millisecond)
+		}
+		if _, err := conn.Write([]byte(l.buildResponse())); err != nil {
+			logbuf.Global.Debug("SSDP unicast write: %v", err)
+			return
+		}
 	}
+	logbuf.Global.Debug("SSDP 200 OK sent to %s", src)
 }
 
 // buildResponse returns the SSDP 200 OK Alexa expects.

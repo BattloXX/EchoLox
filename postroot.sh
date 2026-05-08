@@ -76,8 +76,8 @@ if command -v a2enconf >/dev/null 2>&1; then
 # Managed by EchoLox postroot.sh — do not edit manually.
 ProxyPreserveHost On
 # EchoLox web UI and internal management API
-ProxyPass /ui/ http://127.0.0.1:8079/ui/
-ProxyPassReverse /ui/ http://127.0.0.1:8079/ui/
+ProxyPass /echoloxui/ http://127.0.0.1:8079/echoloxui/
+ProxyPassReverse /echoloxui/ http://127.0.0.1:8079/echoloxui/
 ProxyPass /echolox/ http://127.0.0.1:8079/echolox/
 ProxyPassReverse /echolox/ http://127.0.0.1:8079/echolox/
 # Philips Hue API paths required for Alexa discovery
@@ -215,8 +215,18 @@ done
 PLUGINWEBDIR="$LBHOMEDIR/webfrontend/htmlauth/plugins/EchoLox"
 mkdir -p "$PLUGINWEBDIR"
 cat > "$PLUGINWEBDIR/index.php" << 'PHPEOF'
-<?php header("Location: /ui/"); exit;
+<?php header("Location: /echoloxui/"); exit;
 PHPEOF
+
+# ── sudoers rule: allow loxberry to restart the service ───────────────────
+SUDOERS_FILE="/etc/sudoers.d/echolox-restart"
+cat > "$SUDOERS_FILE" << 'SUDOEOF'
+loxberry ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart echolox.service
+loxberry ALL=(ALL) NOPASSWD: /bin/systemctl restart echolox.service
+SUDOEOF
+chmod 0440 "$SUDOERS_FILE"
+echo "<OK> EchoLox sudoers rule installed"
+
 echo "<OK> EchoLox plugin admin page created"
 
 echo "<OK> EchoLox installed — autostart via systemd enabled"

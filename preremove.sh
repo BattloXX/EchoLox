@@ -12,4 +12,7 @@ if command -v a2disconf >/dev/null 2>&1; then
     apache2ctl graceful >/dev/null 2>&1
 fi
 
+# Remove sudoers rule
+rm -f /etc/sudoers.d/echolox-restart
+
 exit 0
