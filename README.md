@@ -250,7 +250,7 @@ a2enconf echolox-hue
 apache2ctl graceful
 ```
 
-Danach **Einstellungen → Discovery-Port** auf `80` setzen und EchoLox neu starten.
+EchoLox verwendet ab Version 0.1.18 automatisch Port 80 als Discovery-Port (kein manuelles Setzen nötig).
 
 ### SSDP-Flow
 
@@ -599,6 +599,8 @@ iptables -A INPUT -p udp --dport 1900 -j ACCEPT
 ss -ulnp | grep 1900
 ```
 EchoLox nutzt `SO_REUSEPORT` — kann Port 1900 **gleichzeitig** mit LoxBerrys `ssdpd` verwenden. Kein Konflikt, kein Stoppen nötig.
+
+EchoLox sendet beim Start einen NOTIFY-Burst und danach alle **120 Sekunden** erneut. Alexa findet die Bridge also spätestens nach 2 Minuten, auch nach einem Reboot.
 
 ---
 
