@@ -13,7 +13,7 @@ import (
 
 const (
 	ssdpAddr   = "239.255.255.250:1900"
-	apiVersion = "1.47.0"
+	apiVersion = "1.20.0"
 	modelID    = "BSB002"
 	uuidPrefix = "2f402f80-da50-11e1-9b23-"
 )
@@ -112,21 +112,26 @@ func (l *Listener) respond(src *net.UDPAddr) {
 }
 
 // buildResponses returns the three SSDP 200 OK messages a Hue bridge sends.
+// ST/USN format matches diyHue and HA emulated_hue (both confirmed working with Alexa).
 func (l *Listener) buildResponses() []string {
 	fullUUID := uuidPrefix + l.info.Suffix
 	header := "HTTP/1.1 200 OK\r\n" +
-		"CACHE-CONTROL: max-age=100\r\n" +
+		"HOST: 239.255.255.250:1900\r\n" +
 		"EXT:\r\n" +
+		"CACHE-CONTROL: max-age=100\r\n" +
 		"LOCATION: " + l.location() + "\r\n" +
 		"SERVER: Linux/3.14.0 UPnP/1.0 IpBridge/" + apiVersion + "\r\n" +
 		"hue-bridgeid: " + l.info.BridgeID + "\r\n"
 	return []string{
+		// rootdevice: USN includes service suffix
 		header + "ST: upnp:rootdevice\r\n" +
 			"USN: uuid:" + fullUUID + "::upnp:rootdevice\r\n\r\n",
+		// uuid-only: ST is the uuid itself, no suffix in USN
 		header + "ST: uuid:" + fullUUID + "\r\n" +
 			"USN: uuid:" + fullUUID + "\r\n\r\n",
-		header + "ST: urn:schemas-upnp-org:device:Basic:1\r\n" +
-			"USN: uuid:" + fullUUID + "::urn:schemas-upnp-org:device:Basic:1\r\n\r\n",
+		// Hue device type: lowercase "basic:1" and NO suffix in USN (matches diyHue/HA)
+		header + "ST: urn:schemas-upnp-org:device:basic:1\r\n" +
+			"USN: uuid:" + fullUUID + "\r\n\r\n",
 	}
 }
 
@@ -143,15 +148,16 @@ func (l *Listener) sendNotify() {
 	}
 	defer conn.Close()
 	fullUUID := uuidPrefix + l.info.Suffix
+	// NT/USN format matches diyHue (confirmed working); lowercase basic:1, no suffix on uuid entry
 	notifies := []struct{ nt, usn string }{
 		{"upnp:rootdevice", "uuid:" + fullUUID + "::upnp:rootdevice"},
 		{"uuid:" + fullUUID, "uuid:" + fullUUID},
-		{"urn:schemas-upnp-org:device:Basic:1", "uuid:" + fullUUID + "::urn:schemas-upnp-org:device:Basic:1"},
+		{"urn:schemas-upnp-org:device:basic:1", "uuid:" + fullUUID},
 	}
 	for _, n := range notifies {
 		msg := "NOTIFY * HTTP/1.1\r\n" +
 			"HOST: 239.255.255.250:1900\r\n" +
-			"CACHE-CONTROL: max-age=1800\r\n" +
+			"CACHE-CONTROL: max-age=100\r\n" +
 			"LOCATION: " + l.location() + "\r\n" +
 			"NT: " + n.nt + "\r\n" +
 			"NTS: ssdp:alive\r\n" +
@@ -159,8 +165,11 @@ func (l *Listener) sendNotify() {
 			"USN: " + n.usn + "\r\n" +
 			"hue-bridgeid: " + l.info.BridgeID + "\r\n" +
 			"\r\n"
-		if _, err := conn.Write([]byte(msg)); err != nil {
-			logbuf.Global.Debug("SSDP NOTIFY write error: %v", err)
+		// Send each NOTIFY twice for UDP reliability (same as diyHue)
+		for i := 0; i < 2; i++ {
+			if _, err := conn.Write([]byte(msg)); err != nil {
+				logbuf.Global.Debug("SSDP NOTIFY write error: %v", err)
+			}
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -189,8 +198,6 @@ func buildDescriptionXML(info identity.BridgeInfo) string {
 		dPort = info.Port
 	}
 	urlBase := fmt.Sprintf("http://%s:%d/", info.IP, dPort)
-	// serialNumber = MAC without colons (12 uppercase hex chars), not the 16-char bridgeID
-	serial := strings.ToUpper(strings.ReplaceAll(info.MAC, ":", ""))
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <root xmlns="urn:schemas-upnp-org:device-1-0">
   <specVersion>
@@ -227,7 +234,7 @@ func buildDescriptionXML(info identity.BridgeInfo) string {
       </icon>
     </iconList>
   </device>
-</root>`, urlBase, info.IP, modelID, serial, fullUUID)
+</root>`, urlBase, info.IP, modelID, info.BridgeID, fullUUID)
 }
 
 func firstLine(s string) string {
