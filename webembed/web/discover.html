@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EchoLox – Discovery</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <span class="brand">EchoLox</span>
+  <button class="nav-toggle" onclick="toggleNav()" aria-label="Menü">&#9776;</button>
+  <div class="nav-links" id="navLinks">
+    <a href="index.html">Geräte</a>
+    <a href="status.html">Status</a>
+    <a href="settings.html">Einstellungen</a>
+    <a href="backup.html">Backup</a>
+    <a href="logs.html">Logs</a>
+    <a href="import.html">Import</a>
+    <a href="discover.html">Discovery</a>
+    <a href="about.html">About</a>
+  </div>
+</nav>
+<div class="container">
+
+  <!-- Loxone VI Discovery -->
+  <div class="header-row">
+    <h1>Loxone Discovery</h1>
+    <button onclick="scanLoxone()" class="btn btn-primary" id="scanBtn">Miniserver scannen</button>
+  </div>
+  <p style="color:#666;margin-bottom:16px">
+    Sucht auf dem konfigurierten Miniserver nach Virtual Inputs mit dem Prefix <code>echolox_</code>
+    und schlägt passende Geräte vor, die mit einem Klick importiert werden können.
+  </p>
+
+  <div id="loxResult" style="display:none">
+    <div class="header-row" style="margin-bottom:12px">
+      <h2 style="margin-bottom:0">Gefundene Virtual Inputs</h2>
+      <button onclick="importSelected()" class="btn btn-primary">Ausgewählte importieren</button>
+    </div>
+    <table id="loxTable">
+      <thead>
+        <tr>
+          <th style="width:36px"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+          <th>Name</th>
+          <th>Typ</th>
+          <th>Modus</th>
+          <th>Virtual Inputs</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="loxBody"></tbody>
+    </table>
+  </div>
+  <div id="loxEmpty" style="display:none;color:#888;margin-top:8px">Keine neuen <code>echolox_*</code>-Virtual Inputs gefunden.</div>
+  <div id="loxError" style="display:none" class="test-result error"></div>
+  <div id="importResult" style="margin-top:12px"></div>
+
+  <!-- Echo/Alexa Geräte -->
+  <div class="header-row" style="margin-top:40px">
+    <h2>Echo / Alexa Geräte</h2>
+    <button onclick="loadAlexas()" class="btn">Aktualisieren</button>
+  </div>
+  <p style="color:#666;margin-bottom:16px">
+    Alle Echo- / Alexa-Geräte, die diesen Bridge-Emulator per SSDP kontaktiert haben.
+  </p>
+  <table id="alexaTable">
+    <thead><tr><th>IP-Adresse</th><th>User-Agent</th><th>Zuletzt gesehen</th></tr></thead>
+    <tbody id="alexaBody"></tbody>
+  </table>
+  <div id="alexaEmpty" style="display:none;color:#888;margin-top:8px">Noch keine Alexa-Geräte gesehen. Bitte „Alexa, suche neue Geräte" sagen.</div>
+
+</div>
+<script src="assets/app.js"></script>
+<script>loadAlexas();</script>
+</body>
+</html>

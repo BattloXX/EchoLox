@@ -51,6 +51,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/echolox/api/logs/download", h.handleLogsDownload)
 	mux.HandleFunc("/echolox/api/logs/level", h.handleLogsLevel)
 	mux.HandleFunc("/echolox/api/logs", h.handleLogs)
+	mux.HandleFunc("/echolox/api/discover/alexa", h.handleDiscoverAlexa)
+	mux.HandleFunc("/echolox/api/discover/loxone/import", h.handleDiscoverLoxoneImport)
+	mux.HandleFunc("/echolox/api/discover/loxone", h.handleDiscoverLoxone)
 }
 
 func (h *Handler) handleDevices(w http.ResponseWriter, r *http.Request) {

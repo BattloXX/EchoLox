@@ -698,3 +698,124 @@ async function deleteMQTTSubscription(topic) {
     if (res.ok) loadMQTTSubscriptions();
   } catch(_) {}
 }
+
+// ── Discovery ──────────────────────────────────────────────────────────────
+
+let loxProposals = [];
+
+async function scanLoxone() {
+  const btn = document.getElementById('scanBtn');
+  const errEl = document.getElementById('loxError');
+  const resultEl = document.getElementById('loxResult');
+  const emptyEl = document.getElementById('loxEmpty');
+  if (btn) { btn.disabled = true; btn.textContent = 'Scanne…'; }
+  if (errEl) errEl.style.display = 'none';
+  if (resultEl) resultEl.style.display = 'none';
+  if (emptyEl) emptyEl.style.display = 'none';
+  document.getElementById('importResult').textContent = '';
+
+  try {
+    const res = await fetch(`${API}/discover/loxone`);
+    const data = await res.json();
+    if (!res.ok) {
+      if (errEl) { errEl.style.display = ''; errEl.textContent = '✗ ' + (data.error || 'Fehler'); }
+      return;
+    }
+    loxProposals = data || [];
+    const newOnes = loxProposals.filter(p => !p.already_exists);
+    if (!newOnes.length) {
+      if (emptyEl) emptyEl.style.display = '';
+      return;
+    }
+    renderLoxProposals(newOnes);
+    if (resultEl) resultEl.style.display = '';
+  } catch(e) {
+    if (errEl) { errEl.style.display = ''; errEl.textContent = '✗ ' + e.message; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Miniserver scannen'; }
+  }
+}
+
+function renderLoxProposals(proposals) {
+  const tbody = document.getElementById('loxBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  proposals.forEach(p => {
+    const vis = (p.vis || []).map(v => `<div style="font-family:monospace;font-size:0.82em">${v}</div>`).join('');
+    const modeLabel = p.switch_mode === 'impulse'
+      ? '<span class="type-badge" style="background:#7c6">Impuls</span>'
+      : '<span class="type-badge" style="background:#68a">Ein/Aus</span>';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="checkbox" class="lox-check" value="${p.base}" checked></td>
+      <td>${p.display_name}</td>
+      <td><span class="type-badge">${p.type}</span></td>
+      <td>${p.type !== 'scene' ? modeLabel : '—'}</td>
+      <td>${vis}</td>
+      <td><span style="color:#888;font-size:0.85em">neu</span></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function toggleSelectAll(cb) {
+  document.querySelectorAll('.lox-check').forEach(c => c.checked = cb.checked);
+}
+
+async function importSelected() {
+  const checked = [...document.querySelectorAll('.lox-check:checked')].map(c => c.value);
+  if (!checked.length) {
+    alert('Keine Geräte ausgewählt.');
+    return;
+  }
+  const resultEl = document.getElementById('importResult');
+  if (resultEl) { resultEl.className = 'test-result info'; resultEl.textContent = 'Importiere…'; }
+
+  try {
+    const res = await fetch(`${API}/discover/loxone/import`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({bases: checked}),
+    });
+    const data = await res.json();
+    if (res.ok && (data.imported || []).length) {
+      if (resultEl) {
+        resultEl.className = 'test-result ok';
+        resultEl.textContent = `✓ ${data.imported.length} Gerät(e) importiert: ${data.imported.join(', ')}`;
+      }
+      // Refresh scan to update already_exists flags
+      await scanLoxone();
+    } else {
+      const errMsg = Object.values(data.errors || {}).join('; ') || 'Fehler';
+      if (resultEl) { resultEl.className = 'test-result error'; resultEl.textContent = '✗ ' + errMsg; }
+    }
+  } catch(e) {
+    if (resultEl) { resultEl.className = 'test-result error'; resultEl.textContent = '✗ ' + e.message; }
+  }
+}
+
+async function loadAlexas() {
+  const tbody = document.getElementById('alexaBody');
+  const emptyEl = document.getElementById('alexaEmpty');
+  if (!tbody) return;
+  try {
+    const res = await fetch(`${API}/discover/alexa`);
+    const data = await res.json() || [];
+    if (!data.length) {
+      tbody.innerHTML = '';
+      if (emptyEl) emptyEl.style.display = '';
+      return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+    tbody.innerHTML = data.map(a => {
+      const ts = new Date(a.last_seen).toLocaleString('de-AT');
+      const ua = a.user_agent || '—';
+      return `<tr>
+        <td style="font-family:monospace">${escapeHtml(a.ip)}</td>
+        <td style="font-size:0.85em;color:#555">${escapeHtml(ua)}</td>
+        <td style="white-space:nowrap">${ts}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="3" style="color:#c00">Fehler: ${e.message}</td></tr>`;
+  }
+}

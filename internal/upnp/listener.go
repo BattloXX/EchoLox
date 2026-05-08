@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BattloXX/EchoLox/internal/discovery"
 	"github.com/BattloXX/EchoLox/internal/identity"
 	"github.com/BattloXX/EchoLox/internal/logbuf"
 )
@@ -75,6 +76,8 @@ func (l *Listener) Listen() {
 		msg := string(buf[:n])
 		logbuf.Global.Debug("SSDP from %s: %s", src, firstLine(msg))
 		if isMSearch(msg) {
+			ua := extractHeader(msg, "user-agent")
+			discovery.RecordAlexa(src.IP.String(), ua)
 			logbuf.Global.Info("SSDP M-SEARCH from %s — responding (LOCATION: %s)", src, l.location())
 			go l.respond(src, msg)
 		}
@@ -222,4 +225,14 @@ func firstLine(s string) string {
 		return strings.TrimRight(s[:idx], "\r")
 	}
 	return strings.TrimRight(s, "\r\n")
+}
+
+func extractHeader(msg, key string) string {
+	search := strings.ToLower(key) + ":"
+	for _, line := range strings.Split(msg, "\n") {
+		if strings.HasPrefix(strings.ToLower(line), search) {
+			return strings.TrimSpace(line[len(search):])
+		}
+	}
+	return ""
 }
