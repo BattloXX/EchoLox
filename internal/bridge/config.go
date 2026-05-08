@@ -33,7 +33,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	c := &Config{}
 	c.Server.Port = 8079
-	c.Server.DiscoveryPort = 0 // 0 = use Port; set to 80 when nginx proxy is configured
+	c.Server.DiscoveryPort = 80 // Apache proxy forwards :80 → :8079 (set by postinstall.sh)
 	c.UPNP.Name = "EchoLox"
 	c.Loxone.Miniserver = "1"
 	c.Loxone.Transport = "http"

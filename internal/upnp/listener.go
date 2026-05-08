@@ -12,6 +12,8 @@ import (
 	"github.com/BattloXX/EchoLox/internal/logbuf"
 )
 
+var startupTime = time.Now().Unix()
+
 const (
 	ssdpAddr   = "239.255.255.250:1900"
 	apiVersion = "1.16.0"
@@ -56,7 +58,7 @@ func (l *Listener) Listen() {
 			l.sendNotify()
 			time.Sleep(200 * time.Millisecond)
 		}
-		ticker := time.NewTicker(15 * time.Minute)
+		ticker := time.NewTicker(120 * time.Second)
 		for range ticker.C {
 			for i := 0; i < 3; i++ {
 				l.sendNotify()
@@ -116,7 +118,9 @@ func (l *Listener) ssdpHeader() string {
 		"EXT:\r\n" +
 		"LOCATION: " + l.location() + "\r\n" +
 		"SERVER: FreeRTOS/6.0.5, UPnP/1.0, IpBridge/" + apiVersion + "\r\n" +
-		"hue-bridgeid: " + l.info.BridgeID + "\r\n"
+		"hue-bridgeid: " + l.info.BridgeID + "\r\n" +
+		fmt.Sprintf("BOOTID.UPNP.ORG: %d\r\n", startupTime) +
+		"CONFIGID.UPNP.ORG: 1\r\n"
 }
 
 // buildRootResponse matches HA's _upnp_root_response.
@@ -142,8 +146,13 @@ func (l *Listener) sendNotify() {
 	if err != nil {
 		return
 	}
-	// Bind to bridge IP so NOTIFY goes out on the correct interface
-	localAddr := &net.UDPAddr{IP: net.ParseIP(l.info.IP)}
+	// Bind outbound socket to bridge IP so NOTIFY exits on the correct interface.
+	// When IP is unknown (0.0.0.0) use nil so the kernel picks the route — better
+	// than accidentally binding to an unspecified address.
+	var localAddr *net.UDPAddr
+	if l.info.IP != "" && l.info.IP != "0.0.0.0" {
+		localAddr = &net.UDPAddr{IP: net.ParseIP(l.info.IP)}
+	}
 	conn, err := net.DialUDP("udp4", localAddr, ssdpUDPAddr)
 	if err != nil {
 		logbuf.Global.Debug("SSDP NOTIFY dial error: %v", err)
@@ -166,6 +175,8 @@ func (l *Listener) sendNotify() {
 			"SERVER: FreeRTOS/6.0.5, UPnP/1.0, IpBridge/" + apiVersion + "\r\n" +
 			"USN: " + n.usn + "\r\n" +
 			"hue-bridgeid: " + l.info.BridgeID + "\r\n" +
+			fmt.Sprintf("BOOTID.UPNP.ORG: %d\r\n", startupTime) +
+			"CONFIGID.UPNP.ORG: 1\r\n" +
 			"\r\n"
 		for i := 0; i < 2; i++ {
 			conn.Write([]byte(msg))

@@ -114,10 +114,40 @@ func RunCLIImport(from, out string, cfg *Config) {
 }
 
 func autoDetectIP() string {
+	// Fast path: UDP probe learns the preferred outbound IP without sending packets.
 	conn, err := net.Dial("udp", "8.8.8.8:80")
-	if err != nil {
-		return "0.0.0.0"
+	if err == nil {
+		ip := conn.LocalAddr().(*net.UDPAddr).IP.String()
+		conn.Close()
+		if ip != "" && ip != "0.0.0.0" {
+			return ip
+		}
 	}
-	defer conn.Close()
-	return conn.LocalAddr().(*net.UDPAddr).IP.String()
+	// Fallback: iterate interfaces and pick the first non-loopback LAN IPv4.
+	ifaces, _ := net.Interfaces()
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagPointToPoint != 0 {
+			continue
+		}
+		addrs, _ := iface.Addrs()
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip4 := ip.To4(); ip4 != nil {
+				s := ip4.String()
+				// Skip link-local (169.254.x.x)
+				if !ip.IsLinkLocalUnicast() {
+					logbuf.Global.Info("autoDetectIP fallback: using %s from interface %s", s, iface.Name)
+					return s
+				}
+			}
+		}
+	}
+	logbuf.Global.Info("WARNING: could not determine local IP — set server.ip in config")
+	return "0.0.0.0"
 }
