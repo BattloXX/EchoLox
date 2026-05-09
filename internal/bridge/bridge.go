@@ -19,7 +19,7 @@ import (
 	"github.com/BattloXX/EchoLox/internal/web"
 )
 
-func Run(cfg *Config, cfgPath string) error {
+func Run(cfg *Config, cfgPath string, version string) error {
 	// Wire standard log package to ring-buffer logger
 	log.SetOutput(logbuf.Global.Writer())
 	log.SetFlags(0) // timestamps handled by logbuf
@@ -81,7 +81,7 @@ func Run(cfg *Config, cfgPath string) error {
 	hueAPI := hue.NewAPI(mgr, loxClient, verifier, info)
 	hueAPI.Register(mux)
 
-	apiHandler := api.NewHandler(mgr, loxClient, verifier, lbs, cfgPath, cfg.DataDir)
+	apiHandler := api.NewHandler(mgr, loxClient, verifier, lbs, cfgPath, cfg.DataDir, version)
 	apiHandler.Register(mux)
 
 	webHandler := web.NewHandler(mgr, verifier, lbs, web.WebConfig{

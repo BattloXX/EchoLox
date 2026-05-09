@@ -23,9 +23,13 @@ async function loadAbout() {
     }
   } catch(_) {}
 
-  // Version from plugin.cfg via status endpoint or hardcoded
-  const verEl = document.getElementById('version');
-  if (verEl) verEl.textContent = '1.0.0';
+  // Version from binary via API
+  try {
+    const vRes = await fetch(`${API}/version`);
+    const vData = await vRes.json();
+    const verEl = document.getElementById('version');
+    if (verEl && vData.version) verEl.textContent = vData.version;
+  } catch(_) {}
 }
 
 // ── Devices ────────────────────────────────────────────────────────────────

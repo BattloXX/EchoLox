@@ -31,7 +31,7 @@ func main() {
 	}
 
 	log.Printf("EchoLox v%s starting on port %d", version, cfg.Server.Port)
-	if err := bridge.Run(cfg, *cfgPath); err != nil {
+	if err := bridge.Run(cfg, *cfgPath, version); err != nil {
 		log.Fatal(err)
 	}
 }

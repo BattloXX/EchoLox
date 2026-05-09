@@ -28,13 +28,15 @@ type Handler struct {
 	lbs      map[string]loxone.LBMiniserver
 	cfgPath  string
 	dataDir  string
+	version  string
 }
 
-func NewHandler(mgr *device.Manager, lox *loxone.Client, verifier *loxone.Verifier, lbs map[string]loxone.LBMiniserver, cfgPath, dataDir string) *Handler {
-	return &Handler{mgr: mgr, lox: lox, verifier: verifier, lbs: lbs, cfgPath: cfgPath, dataDir: dataDir}
+func NewHandler(mgr *device.Manager, lox *loxone.Client, verifier *loxone.Verifier, lbs map[string]loxone.LBMiniserver, cfgPath, dataDir, version string) *Handler {
+	return &Handler{mgr: mgr, lox: lox, verifier: verifier, lbs: lbs, cfgPath: cfgPath, dataDir: dataDir, version: version}
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
+	mux.HandleFunc("/echolox/api/version", h.handleVersion)
 	mux.HandleFunc("/echolox/api/devices", h.handleDevices)
 	mux.HandleFunc("/echolox/api/devices/", h.handleDevice)
 	mux.HandleFunc("/echolox/api/status", h.handleStatus)
@@ -54,6 +56,11 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/echolox/api/discover/alexa", h.handleDiscoverAlexa)
 	mux.HandleFunc("/echolox/api/discover/loxone/import", h.handleDiscoverLoxoneImport)
 	mux.HandleFunc("/echolox/api/discover/loxone", h.handleDiscoverLoxone)
+}
+
+func (h *Handler) handleVersion(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	writeJSON(w, map[string]string{"version": h.version})
 }
 
 func (h *Handler) handleDevices(w http.ResponseWriter, r *http.Request) {
