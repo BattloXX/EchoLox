@@ -15,8 +15,9 @@ import (
 // so we define the raw value directly (15 on all Linux architectures).
 const soReusePort = 15
 
-// listenMulticast creates a UDP multicast socket on 239.255.255.250:1900 with
-// SO_REUSEADDR + SO_REUSEPORT so EchoLox can coexist with LoxBerry's system ssdpd.
+// listenMulticast creates a UDP multicast socket on 239.255.255.250:1900.
+// EchoLox expects exclusive ownership of port 1900 (LoxBerry ssdpd must be disabled).
+// SO_REUSEADDR + SO_REUSEPORT are kept defensively for clean service restarts.
 // IP_ADD_MEMBERSHIP and IP_MULTICAST_IF are set via raw Syscall6 for ARM cross-compile
 // compatibility (syscall.SetsockoptIpMreq struct layout differs on ARM).
 func listenMulticast(localIP net.IP) (*net.UDPConn, error) {

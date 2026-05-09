@@ -295,10 +295,7 @@ async function loadSettings() {
         const p = document.getElementById('serverPort');
         if (p) p.value = cfg.port;
       }
-      if (cfg.discovery_port !== undefined) {
-        const dp = document.getElementById('discoveryPort');
-        if (dp) dp.value = cfg.discovery_port;
-      }
+
       if (cfg.mqtt_broker) {
         const m = document.getElementById('mqttBroker');
         if (m) m.value = cfg.mqtt_broker;
@@ -318,8 +315,7 @@ async function loadSettings() {
         miniserver: document.getElementById('miniserver')?.value || '',
         transport:  document.getElementById('loxTransport')?.value || 'http',
         udp_port:   parseInt(document.getElementById('udpPort')?.value) || 7777,
-        port:           parseInt(document.getElementById('serverPort')?.value) || 8079,
-        discovery_port: parseInt(document.getElementById('discoveryPort')?.value) || 0,
+        port:         parseInt(document.getElementById('serverPort')?.value) || 80,
         mqtt_broker:    document.getElementById('mqttBroker')?.value || '',
         mqtt_username:  document.getElementById('mqttUsername')?.value || '',
         mqtt_password:  pwEl ? pwEl.value : undefined,

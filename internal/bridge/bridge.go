@@ -70,10 +70,9 @@ func Run(cfg *Config, cfgPath string) error {
 		bridgeIP = autoDetectIP()
 	}
 
-	discoveryPort := cfg.Server.DiscoveryPort
-	info := identity.New(bridgeIP, cfg.Server.Port, discoveryPort)
-	logbuf.Global.Info("Bridge identity: IP=%s  port=%d  discovery-port=%d  bridgeid=%s",
-		info.IP, info.Port, info.DiscoveryPort, info.BridgeID)
+	info := identity.New(bridgeIP, cfg.Server.Port)
+	logbuf.Global.Info("Bridge identity: IP=%s  port=%d  bridgeid=%s",
+		info.IP, info.Port, info.BridgeID)
 
 	mux := http.NewServeMux()
 

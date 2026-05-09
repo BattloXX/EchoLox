@@ -30,15 +30,8 @@ func NewListener(info identity.BridgeInfo) *Listener {
 	return &Listener{info: info}
 }
 
-func (l *Listener) discoveryPort() int {
-	if l.info.DiscoveryPort > 0 {
-		return l.info.DiscoveryPort
-	}
-	return l.info.Port
-}
-
 func (l *Listener) location() string {
-	return fmt.Sprintf("http://%s:%d/description.xml", l.info.IP, l.discoveryPort())
+	return fmt.Sprintf("http://%s:%d/description.xml", l.info.IP, l.info.Port)
 }
 
 func (l *Listener) Listen() {
@@ -203,11 +196,7 @@ func RegisterDescription(mux *http.ServeMux, info identity.BridgeInfo) {
 // no iconList, no presentationURL — just the fields Alexa actually needs.
 func buildDescriptionXML(info identity.BridgeInfo) string {
 	fullUUID := uuidPrefix + info.Suffix
-	dPort := info.DiscoveryPort
-	if dPort <= 0 {
-		dPort = info.Port
-	}
-	urlBase := fmt.Sprintf("http://%s:%d/", info.IP, dPort)
+	urlBase := fmt.Sprintf("http://%s:%d/", info.IP, info.Port)
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" ?>
 <root xmlns="urn:schemas-upnp-org:device-1-0">
 <specVersion>

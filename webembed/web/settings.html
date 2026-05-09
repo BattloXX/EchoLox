@@ -23,6 +23,15 @@
 </nav>
 <div class="container">
   <h1>Einstellungen</h1>
+  <div class="card" style="background:#fff8e1;border-left:4px solid #f59e0b;margin-bottom:1rem;padding:1rem">
+    <strong>Voraussetzungen für Alexa-Discovery:</strong>
+    <ol style="margin:0.5rem 0 0 1.2rem;padding:0">
+      <li>LoxBerry-Webinterface-Port von 80 auf 88 verschieben (LoxBerry-Einstellungen → System)</li>
+      <li>LoxBerry-SSDP-Dienst deaktivieren: <code>systemctl disable --now lbssdpd</code></li>
+      <li>EchoLox-Plugin (re)installieren — <code>postinstall.sh</code> setzt automatisch die nötigen Rechte</li>
+    </ol>
+    <p style="margin:0.5rem 0 0">EchoLox läuft danach <strong>exklusiv auf Port 80</strong> und besitzt SSDP (Port 1900) allein. Kein Reverse-Proxy nötig.</p>
+  </div>
   <div class="card">
     <form id="settingsForm">
       <div class="form-group">
@@ -43,12 +52,8 @@
       </div>
       <div class="form-group">
         <label>EchoLox Port</label>
-        <input type="number" id="serverPort" value="8079">
-      </div>
-      <div class="form-group">
-        <label>Discovery-Port (SSDP / Alexa)</label>
-        <input type="number" id="discoveryPort" value="0" placeholder="0 = gleich wie EchoLox-Port">
-        <small style="color:#888;display:block;margin-top:4px">Alexa (ab 2019) erwartet Port 80. Setze auf 80 wenn der Apache2-Proxy läuft (Infos unter <a href="logs.html">Logs</a>).</small>
+        <input type="number" id="serverPort" value="80">
+        <small style="color:#888;display:block;margin-top:4px">Standard: 80 (direkt, kein Proxy). Voraussetzungen: LoxBerry-Adminport auf 88, lbssdpd deaktiviert.</small>
       </div>
       <div class="form-group">
         <label>MQTT Broker</label>

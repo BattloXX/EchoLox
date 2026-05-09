@@ -218,9 +218,8 @@ func (h *Handler) handleVerify(w http.ResponseWriter, r *http.Request) {
 // configYAML mirrors bridge.Config for reading/writing without an import cycle.
 type configYAML struct {
 	Server struct {
-		Port          int    `yaml:"port"`
-		IP            string `yaml:"ip,omitempty"`
-		DiscoveryPort int    `yaml:"discovery_port"`
+		Port int    `yaml:"port"`
+		IP   string `yaml:"ip,omitempty"`
 	} `yaml:"server"`
 	UPNP struct {
 		Name string `yaml:"name,omitempty"`
@@ -264,26 +263,24 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		cfg := readCfg()
 		writeJSON(w, map[string]interface{}{
-			"miniserver":     cfg.Loxone.Miniserver,
-			"transport":      cfg.Loxone.Transport,
-			"udp_port":       cfg.Loxone.UDPPort,
-			"port":           cfg.Server.Port,
-			"discovery_port": cfg.Server.DiscoveryPort,
-			"mqtt_broker":    cfg.MQTT.Broker,
-			"mqtt_username":  cfg.MQTT.Username,
-			"mqtt_password":  cfg.MQTT.Password,
+			"miniserver":    cfg.Loxone.Miniserver,
+			"transport":     cfg.Loxone.Transport,
+			"udp_port":      cfg.Loxone.UDPPort,
+			"port":          cfg.Server.Port,
+			"mqtt_broker":   cfg.MQTT.Broker,
+			"mqtt_username": cfg.MQTT.Username,
+			"mqtt_password": cfg.MQTT.Password,
 		})
 
 	case http.MethodPost:
 		var req struct {
-			Miniserver    string  `json:"miniserver"`
-			Transport     string  `json:"transport"`
-			UDPPort       int     `json:"udp_port"`
-			Port          int     `json:"port"`
-			DiscoveryPort *int    `json:"discovery_port"`
-			MQTTBroker    string  `json:"mqtt_broker"`
-			MQTTUsername  string  `json:"mqtt_username"`
-			MQTTPassword  *string `json:"mqtt_password"`
+			Miniserver   string  `json:"miniserver"`
+			Transport    string  `json:"transport"`
+			UDPPort      int     `json:"udp_port"`
+			Port         int     `json:"port"`
+			MQTTBroker   string  `json:"mqtt_broker"`
+			MQTTUsername string  `json:"mqtt_username"`
+			MQTTPassword *string `json:"mqtt_password"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), 400)
@@ -301,9 +298,6 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Port > 0 {
 			cfg.Server.Port = req.Port
-		}
-		if req.DiscoveryPort != nil {
-			cfg.Server.DiscoveryPort = *req.DiscoveryPort
 		}
 		if req.MQTTBroker != "" {
 			cfg.MQTT.Broker = req.MQTTBroker

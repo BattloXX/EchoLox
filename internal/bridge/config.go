@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 
@@ -9,9 +10,8 @@ import (
 
 type Config struct {
 	Server struct {
-		Port          int    `yaml:"port"`
-		IP            string `yaml:"ip"`
-		DiscoveryPort int    `yaml:"discovery_port"` // port advertised in SSDP (80 for Alexa; 0 = same as Port)
+		Port int    `yaml:"port"`
+		IP   string `yaml:"ip"`
 	} `yaml:"server"`
 	UPNP struct {
 		Name string `yaml:"name"`
@@ -32,8 +32,7 @@ type Config struct {
 
 func DefaultConfig() *Config {
 	c := &Config{}
-	c.Server.Port = 8079
-	c.Server.DiscoveryPort = 80 // Apache proxy forwards :80 → :8079 (set by postinstall.sh)
+	c.Server.Port = 80
 	c.UPNP.Name = "EchoLox"
 	c.Loxone.Miniserver = "1"
 	c.Loxone.Transport = "http"
@@ -54,6 +53,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.DataDir == "" {
 		cfg.DataDir = lbPath("LBPDATADIR", "./data")
+	}
+	if cfg.Server.Port == 8079 {
+		log.Printf("WARNING: server.port=8079 detected from old config — new architecture uses port 80 directly. Update EchoLox.cfg after moving LoxBerry admin to port 88.")
 	}
 	return cfg, nil
 }
