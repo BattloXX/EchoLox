@@ -1,11 +1,14 @@
 #!/bin/bash
 # EchoLox postinstall:
 #  1. Select the correct binary for this CPU architecture
-#  2. Grant CAP_NET_BIND_SERVICE so EchoLox can bind port 80 without root
-#  3. Sanity-check that port 80 and port 1900 are free
+#  2. Migrate old config (port 8079 -> 80, remove discovery_port)
+#  3. Grant CAP_NET_BIND_SERVICE so EchoLox can bind port 80 without root
+#  4. Sanity-check that port 80 and port 1900 are free
 
 BINDIR="${LBPBINDIR:-/opt/loxberry/webfrontend/htmlauth/plugins/EchoLox/bin}"
+DATADIR="${LBPDATADIR:-/opt/loxberry/data/plugins/EchoLox}"
 BIN="$BINDIR/EchoLox"
+CFG="$DATADIR/EchoLox.cfg"
 
 # ── 1. Architecture selection ────────────────────────────────────────────────
 ARCH=$(uname -m)
@@ -13,7 +16,7 @@ case "$ARCH" in
     aarch64)        SRC="$BINDIR/EchoLox-arm64" ;;
     armv7l|armv6l)  SRC="$BINDIR/EchoLox-armv7" ;;
     x86_64)         SRC="$BINDIR/EchoLox-amd64"  ;;
-    *)              SRC="$BINDIR/EchoLox-arm64"  ;;   # best-effort fallback
+    *)              SRC="$BINDIR/EchoLox-arm64"  ;;
 esac
 
 if [ -f "$SRC" ]; then
@@ -25,7 +28,21 @@ else
     exit 1
 fi
 
-# ── 2. Privileged-port binding (port 80) ────────────────────────────────────
+# ── 2. Config migration ───────────────────────────────────────────────────────
+if [ -f "$CFG" ]; then
+    # port: 8079 -> port: 80  (old proxy architecture -> direct binding)
+    if grep -q 'port: 8079' "$CFG"; then
+        sed -i 's/port: 8079/port: 80/' "$CFG"
+        echo "EchoLox: migrated config: port 8079 -> 80"
+    fi
+    # remove discovery_port (no longer used)
+    if grep -q 'discovery_port' "$CFG"; then
+        sed -i '/discovery_port/d' "$CFG"
+        echo "EchoLox: migrated config: removed discovery_port"
+    fi
+fi
+
+# ── 3. Privileged-port binding (port 80) ────────────────────────────────────
 if command -v setcap >/dev/null 2>&1; then
     if setcap 'cap_net_bind_service=+ep' "$BIN"; then
         echo "EchoLox: CAP_NET_BIND_SERVICE set on $BIN — port 80 binding enabled"
@@ -37,10 +54,10 @@ else
     echo "  setcap 'cap_net_bind_service=+ep' $BIN"
 fi
 
-# ── 3. Sanity checks (non-fatal) ─────────────────────────────────────────────
+# ── 4. Sanity checks (non-fatal) ─────────────────────────────────────────────
 if ss -tlnp 2>/dev/null | grep -qE ':80\s'; then
     echo "EchoLox WARNING: something is already listening on port 80."
-    echo "  -> Move LoxBerry admin port to 88 (LoxBerry Settings -> System) before starting EchoLox."
+    echo "  -> Move LoxBerry admin port to 88 before starting EchoLox."
 fi
 
 if systemctl is-active --quiet lbssdpd 2>/dev/null; then

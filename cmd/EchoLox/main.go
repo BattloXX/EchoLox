@@ -9,6 +9,8 @@ import (
 	"github.com/BattloXX/EchoLox/internal/bridge"
 )
 
+var version = "dev"
+
 func main() {
 	defaultCfg := filepath.Join(lbPath("LBPDATADIR", "./data"), "EchoLox.cfg")
 	cfgPath := flag.String("config", defaultCfg, "path to config file")
@@ -28,7 +30,7 @@ func main() {
 		return
 	}
 
-	log.Printf("EchoLox starting on port %d", cfg.Server.Port)
+	log.Printf("EchoLox v%s starting on port %d", version, cfg.Server.Port)
 	if err := bridge.Run(cfg, *cfgPath); err != nil {
 		log.Fatal(err)
 	}
