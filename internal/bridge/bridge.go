@@ -71,7 +71,7 @@ func Run(cfg *Config, cfgPath string, version string) error {
 	}
 
 	discoveryPort := cfg.Server.DiscoveryPort
-	info := identity.New(bridgeIP, cfg.Server.Port, discoveryPort)
+	info := identity.New(bridgeIP, cfg.Server.Port, discoveryPort, cfg.UPNP.UUID)
 	logbuf.Global.Info("Bridge identity: IP=%s  port=%d  discovery-port=%d  bridgeid=%s",
 		info.IP, info.Port, info.DiscoveryPort, info.BridgeID)
 

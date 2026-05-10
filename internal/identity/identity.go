@@ -20,8 +20,13 @@ type BridgeInfo struct {
 }
 
 // New derives a stable bridge identity from the IP address.
-func New(ip string, port, discoveryPort int) BridgeInfo {
-	h := md5.Sum([]byte("echolox-bridge:" + ip))
+// salt (from upnp.uuid in config) lets users force a new UUID when Alexa has a stale cached pairing.
+func New(ip string, port, discoveryPort int, salt string) BridgeInfo {
+	seed := "echolox-bridge:" + ip
+	if salt != "" {
+		seed = "echolox-bridge:" + salt + ":" + ip
+	}
+	h := md5.Sum([]byte(seed))
 	suffix := fmt.Sprintf("%012x", h[:6])
 	bridgeID := strings.ToUpper("001788fffe" + suffix[6:])
 	mac := fmt.Sprintf("00:17:88:%02x:%02x:%02x", h[3], h[4], h[5])
