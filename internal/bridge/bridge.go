@@ -100,7 +100,14 @@ func Run(cfg *Config, cfgPath string, version string) error {
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	logbuf.Global.Info("EchoLox HTTP server listening on %s", addr)
-	return http.ListenAndServe(addr, mux)
+	return http.ListenAndServe(addr, logRequests(mux))
+}
+
+func logRequests(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logbuf.Global.Debug("HTTP %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+		next.ServeHTTP(w, r)
+	})
 }
 
 func RunCLIImport(from, out string, cfg *Config) {
