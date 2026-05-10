@@ -1,4 +1,4 @@
-name: Build & Release
+name: Release ZIP
 
 on:
   push:
@@ -24,49 +24,40 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Compute next version
+      - name: Read version from plugin.cfg
         id: ver
         run: |
-          LATEST=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
-          if [ -z "$LATEST" ]; then
-            NEXT="0.1.0"
+          V=$(grep -E '^VERSION = ' plugin.cfg | head -1 | sed 's/VERSION = //')
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Release version: $V"
+
+      - name: Verify locally compiled binaries are present
+        run: |
+          test -x bin/EchoLox-arm64 || { echo "::error::bin/EchoLox-arm64 fehlt — lokal builden (make all) und committen"; exit 1; }
+          test -x bin/EchoLox-armv7  || { echo "::error::bin/EchoLox-armv7 fehlt — lokal builden (make all) und committen"; exit 1; }
+          test -x bin/EchoLox-amd64  || { echo "::error::bin/EchoLox-amd64 fehlt — lokal builden (make all) und committen"; exit 1; }
+
+      - name: Skip if release already exists
+        id: check
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          if gh release view "v$V" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release v$V existiert bereits — wird uebersprungen"
           else
-            V="${LATEST#v}"
-            MAJOR=$(echo "$V" | cut -d. -f1)
-            MINOR=$(echo "$V" | cut -d. -f2)
-            PATCH=$(echo "$V" | cut -d. -f3)
-            NEXT="$MAJOR.$MINOR.$((PATCH + 1))"
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
-          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
-          echo "Next release: $NEXT"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-          cache: true
-
-      - name: Build binaries
-        run: |
-          go mod tidy
-          V="${{ steps.ver.outputs.version }}"
-          GOOS=linux GOARCH=arm64       go build -ldflags="-s -w -X main.version=$V" -o bin/EchoLox-arm64 ./cmd/EchoLox
-          GOOS=linux GOARCH=arm GOARM=7 go build -ldflags="-s -w -X main.version=$V" -o bin/EchoLox-armv7 ./cmd/EchoLox
-          GOOS=linux GOARCH=amd64       go build -ldflags="-s -w -X main.version=$V" -o bin/EchoLox-amd64  ./cmd/EchoLox
-
-      - name: Stamp version into plugin.cfg and Makefile
-        run: |
-          V="${{ steps.ver.outputs.version }}"
-          sed -i "s/^VERSION = .*/VERSION = $V/" plugin.cfg
-          sed -i "s/^VERSION=.*/VERSION=$V/" Makefile
-
       - name: Build ZIP
+        if: steps.check.outputs.exists == 'false'
         run: |
           zip -r "EchoLox-${{ steps.ver.outputs.version }}.zip" * \
             -x "*.git*" -x "bin/EchoLox" -x "*.zip" -x "*.tmp" -x "go.sum" -x "generated-image.png"
 
       - name: Create release
+        if: steps.check.outputs.exists == 'false'
         run: |
           V="${{ steps.ver.outputs.version }}"
           COMMIT_MSG=$(git log -1 --pretty='%s')
@@ -76,13 +67,14 @@ jobs:
           fi
           gh release create "v$V" \
             --title "EchoLox v$V" \
-            --notes "$(printf 'Automatischer Build von \`main\`\n\n**Commit:** %s' "$COMMIT_MSG")" \
+            --notes "$(printf 'Build aus lokal kompilierten Bins\n\n**Commit:** %s' "$COMMIT_MSG")" \
             $PRERELEASE_FLAG \
             "EchoLox-$V.zip"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update release.cfg for LoxBerry autoupdate
+        if: steps.check.outputs.exists == 'false'
         run: |
           V="${{ steps.ver.outputs.version }}"
           REPO="${{ github.repository }}"

@@ -10,8 +10,9 @@ import (
 
 type Config struct {
 	Server struct {
-		Port int    `yaml:"port"`
-		IP   string `yaml:"ip"`
+		Port          int    `yaml:"port"`
+		IP            string `yaml:"ip"`
+		DiscoveryPort int    `yaml:"discovery_port"` // port advertised in SSDP (0 = same as Port)
 	} `yaml:"server"`
 	UPNP struct {
 		Name string `yaml:"name"`
@@ -33,6 +34,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	c := &Config{}
 	c.Server.Port = 80
+	c.Server.DiscoveryPort = 0 // 0 = use Port; set to 80 when behind a reverse proxy
 	c.UPNP.Name = "EchoLox"
 	c.Loxone.Miniserver = "1"
 	c.Loxone.Transport = "http"

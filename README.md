@@ -11,6 +11,10 @@
 
 ---
 
+> **v0.2.0** — Hue-Identität (apiversion 1.47.0, Royal Philips Electronics, Signify Netherlands B.V., capabilities, hue_logo Icons, description.xml mit iconList) und SSDP-Listener aus v0.1.8 wiederhergestellt — Alexa erkennt EchoLox-Geräte wieder zuverlässig. Loxone-Richtung (Impuls/Ein-Aus, VI-Discovery) unverändert. Go-Binaries werden ab sofort lokal gebaut und committed; CI erstellt nur noch den ZIP.
+
+---
+
 ```
 Alexa
   │  SSDP Discovery  (UDP :1900)
@@ -271,7 +275,7 @@ Echo Device                    EchoLox (UDP :1900)
     │◀── { "1": {…}, "2": {…} } ────│
 ```
 
-EchoLox sendet beim Start einen NOTIFY-Burst (3× in 2 Sekunden) und danach alle **120 Sekunden** erneut. Alexa findet die Bridge also spätestens nach 2 Minuten, auch nach einem Reboot.
+EchoLox sendet beim Start einen SSDP NOTIFY und danach alle **30 Minuten** erneut. Die Bridge meldet sich als `Linux/3.14.0 UPnP/1.0 IpBridge/1.47.0` mit ST `urn:schemas-upnp-org:device:Basic:1` — die Kennung, die Alexa von einer echten Philips Hue Bridge Generation 2 erwartet.
 
 ---
 
@@ -412,6 +416,7 @@ Pfad: `/opt/loxberry/data/plugins/EchoLox/EchoLox.cfg`
 ```yaml
 server:
   port: 80             # Port auf dem EchoLox lauscht (direkt, kein Proxy)
+  discovery_port: 0    # In SSDP beworbener Port (0 = wie port); nur bei Reverse-Proxy setzen
   ip: ""               # leer = automatisch erkannt
 
 upnp:

@@ -12,11 +12,9 @@ import (
 	"github.com/BattloXX/EchoLox/internal/logbuf"
 )
 
-var startupTime = time.Now().Unix()
-
 const (
 	ssdpAddr   = "239.255.255.250:1900"
-	apiVersion = "1.16.0"
+	apiVersion = "1.47.0"
 	modelID    = "BSB002"
 	uuidPrefix = "2f402f80-da50-11e1-9b23-"
 )
@@ -30,12 +28,19 @@ func NewListener(info identity.BridgeInfo) *Listener {
 	return &Listener{info: info}
 }
 
+func (l *Listener) discoveryPort() int {
+	if l.info.DiscoveryPort > 0 {
+		return l.info.DiscoveryPort
+	}
+	return l.info.Port
+}
+
 func (l *Listener) location() string {
-	return fmt.Sprintf("http://%s:%d/description.xml", l.info.IP, l.info.Port)
+	return fmt.Sprintf("http://%s:%d/description.xml", l.info.IP, l.discoveryPort())
 }
 
 func (l *Listener) Listen() {
-	conn, err := listenMulticast(net.ParseIP(l.info.IP))
+	conn, err := listenMulticast()
 	if err != nil {
 		logbuf.Global.Info("SSDP listen error: %v — Alexa discovery disabled", err)
 		return
@@ -44,19 +49,13 @@ func (l *Listener) Listen() {
 	conn.SetReadBuffer(65536)
 	logbuf.Global.Info("SSDP listener on %s  bridgeid=%s  LOCATION=%s", ssdpAddr, l.info.BridgeID, l.location())
 
-	// Send NOTIFY announcements on start and periodically
+	// Send NOTIFY announcements on start and every 30 min
 	go func() {
 		time.Sleep(2 * time.Second)
-		for i := 0; i < 3; i++ {
-			l.sendNotify()
-			time.Sleep(200 * time.Millisecond)
-		}
-		ticker := time.NewTicker(120 * time.Second)
+		l.sendNotify()
+		ticker := time.NewTicker(30 * time.Minute)
 		for range ticker.C {
-			for i := 0; i < 3; i++ {
-				l.sendNotify()
-				time.Sleep(200 * time.Millisecond)
-			}
+			l.sendNotify()
 		}
 	}()
 
@@ -70,113 +69,81 @@ func (l *Listener) Listen() {
 		}
 		msg := string(buf[:n])
 		logbuf.Global.Debug("SSDP from %s: %s", src, firstLine(msg))
-		if isMSearch(msg) {
+		if l.isMSearch(msg) {
 			ua := extractHeader(msg, "user-agent")
 			discovery.RecordAlexa(src.IP.String(), ua)
 			logbuf.Global.Info("SSDP M-SEARCH from %s — responding (LOCATION: %s)", src, l.location())
-			go l.respond(src, msg)
+			go l.respond(src)
 		}
 	}
 }
 
-func isMSearch(msg string) bool {
-	return strings.HasPrefix(msg, "M-SEARCH") && strings.Contains(strings.ToLower(msg), "ssdp:discover")
+// isMSearch returns true for any M-SEARCH with MAN: "ssdp:discover".
+// Responds to all such requests (Alexa uses Basic:1, but we accept ssdp:all too).
+func (l *Listener) isMSearch(msg string) bool {
+	if !strings.HasPrefix(msg, "M-SEARCH") {
+		return false
+	}
+	return strings.Contains(strings.ToLower(msg), "ssdp:discover")
 }
 
-// respond mirrors HA's _handle_request: send rootdevice if that's what was asked,
-// otherwise send the Hue device response — exactly ONE packet per M-SEARCH.
-func (l *Listener) respond(src *net.UDPAddr, msg string) {
+// respond sends a unicast 200 OK via a dedicated ephemeral socket.
+func (l *Listener) respond(src *net.UDPAddr) {
 	conn, err := net.DialUDP("udp4", nil, src)
 	if err != nil {
 		logbuf.Global.Debug("SSDP unicast dial: %v", err)
 		return
 	}
 	defer conn.Close()
-	var resp string
-	if strings.Contains(msg, "upnp:rootdevice") {
-		resp = l.buildRootResponse()
-	} else {
-		resp = l.buildDeviceResponse()
-	}
-	if _, err := conn.Write([]byte(resp)); err != nil {
+	if _, err := conn.Write([]byte(l.buildResponse())); err != nil {
 		logbuf.Global.Debug("SSDP unicast write: %v", err)
-		return
+	} else {
+		logbuf.Global.Debug("SSDP 200 OK sent to %s", src)
 	}
-	logbuf.Global.Debug("SSDP 200 OK sent to %s", src)
 }
 
-func (l *Listener) ssdpHeader() string {
+// buildResponse returns the SSDP 200 OK Alexa expects.
+func (l *Listener) buildResponse() string {
+	fullUUID := uuidPrefix + l.info.Suffix
 	return "HTTP/1.1 200 OK\r\n" +
-		"CACHE-CONTROL: max-age=60\r\n" +
+		"CACHE-CONTROL: max-age=100\r\n" +
 		"EXT:\r\n" +
 		"LOCATION: " + l.location() + "\r\n" +
-		"SERVER: FreeRTOS/6.0.5, UPnP/1.0, IpBridge/" + apiVersion + "\r\n" +
+		"SERVER: Linux/3.14.0 UPnP/1.0 IpBridge/" + apiVersion + "\r\n" +
+		"ST: urn:schemas-upnp-org:device:Basic:1\r\n" +
+		"USN: uuid:" + fullUUID + "::urn:schemas-upnp-org:device:Basic:1\r\n" +
 		"hue-bridgeid: " + l.info.BridgeID + "\r\n" +
-		fmt.Sprintf("BOOTID.UPNP.ORG: %d\r\n", startupTime) +
-		"CONFIGID.UPNP.ORG: 1\r\n"
+		"\r\n"
 }
 
-// buildRootResponse matches HA's _upnp_root_response.
-func (l *Listener) buildRootResponse() string {
-	fullUUID := uuidPrefix + l.info.Suffix
-	return l.ssdpHeader() +
-		"ST: upnp:rootdevice\r\n" +
-		"USN: uuid:" + fullUUID + "::upnp:rootdevice\r\n\r\n"
-}
-
-// buildDeviceResponse matches HA's _upnp_device_response:
-// lowercase "basic:1" and UUID-only USN (no service suffix).
-func (l *Listener) buildDeviceResponse() string {
-	fullUUID := uuidPrefix + l.info.Suffix
-	return l.ssdpHeader() +
-		"ST: urn:schemas-upnp-org:device:basic:1\r\n" +
-		"USN: uuid:" + fullUUID + "\r\n\r\n"
-}
-
-// sendNotify broadcasts SSDP NOTIFY for three UPnP service types.
+// sendNotify broadcasts an SSDP NOTIFY so Alexa can find the bridge without M-SEARCH.
 func (l *Listener) sendNotify() {
 	ssdpUDPAddr, err := net.ResolveUDPAddr("udp4", ssdpAddr)
 	if err != nil {
 		return
 	}
-	// Bind outbound socket to bridge IP so NOTIFY exits on the correct interface.
-	// When IP is unknown (0.0.0.0) use nil so the kernel picks the route — better
-	// than accidentally binding to an unspecified address.
-	var localAddr *net.UDPAddr
-	if l.info.IP != "" && l.info.IP != "0.0.0.0" {
-		localAddr = &net.UDPAddr{IP: net.ParseIP(l.info.IP)}
-	}
-	conn, err := net.DialUDP("udp4", localAddr, ssdpUDPAddr)
+	conn, err := net.DialUDP("udp4", nil, ssdpUDPAddr)
 	if err != nil {
 		logbuf.Global.Debug("SSDP NOTIFY dial error: %v", err)
 		return
 	}
 	defer conn.Close()
 	fullUUID := uuidPrefix + l.info.Suffix
-	notifies := []struct{ nt, usn string }{
-		{"upnp:rootdevice", "uuid:" + fullUUID + "::upnp:rootdevice"},
-		{"uuid:" + fullUUID, "uuid:" + fullUUID},
-		{"urn:schemas-upnp-org:device:basic:1", "uuid:" + fullUUID},
+	notify := "NOTIFY * HTTP/1.1\r\n" +
+		"HOST: 239.255.255.250:1900\r\n" +
+		"CACHE-CONTROL: max-age=1800\r\n" +
+		"LOCATION: " + l.location() + "\r\n" +
+		"NT: urn:schemas-upnp-org:device:Basic:1\r\n" +
+		"NTS: ssdp:alive\r\n" +
+		"SERVER: Linux/3.14.0 UPnP/1.0 IpBridge/" + apiVersion + "\r\n" +
+		"USN: uuid:" + fullUUID + "::urn:schemas-upnp-org:device:Basic:1\r\n" +
+		"hue-bridgeid: " + l.info.BridgeID + "\r\n" +
+		"\r\n"
+	if _, err := conn.Write([]byte(notify)); err != nil {
+		logbuf.Global.Debug("SSDP NOTIFY write error: %v", err)
+	} else {
+		logbuf.Global.Info("SSDP NOTIFY sent (LOCATION: %s)", l.location())
 	}
-	for _, n := range notifies {
-		msg := "NOTIFY * HTTP/1.1\r\n" +
-			"HOST: 239.255.255.250:1900\r\n" +
-			"CACHE-CONTROL: max-age=60\r\n" +
-			"LOCATION: " + l.location() + "\r\n" +
-			"NT: " + n.nt + "\r\n" +
-			"NTS: ssdp:alive\r\n" +
-			"SERVER: FreeRTOS/6.0.5, UPnP/1.0, IpBridge/" + apiVersion + "\r\n" +
-			"USN: " + n.usn + "\r\n" +
-			"hue-bridgeid: " + l.info.BridgeID + "\r\n" +
-			fmt.Sprintf("BOOTID.UPNP.ORG: %d\r\n", startupTime) +
-			"CONFIGID.UPNP.ORG: 1\r\n" +
-			"\r\n"
-		for i := 0; i < 2; i++ {
-			conn.Write([]byte(msg))
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	logbuf.Global.Info("SSDP NOTIFY sent (LOCATION: %s)", l.location())
 }
 
 // RegisterDescription registers /description.xml and icon stubs on the HTTP mux.
@@ -192,32 +159,52 @@ func RegisterDescription(mux *http.ServeMux, info identity.BridgeInfo) {
 	mux.HandleFunc("/hue_logo_3.png", func(w http.ResponseWriter, r *http.Request) {})
 }
 
-// buildDescriptionXML returns the UPnP device description, matching HA's format:
-// no iconList, no presentationURL — just the fields Alexa actually needs.
+// buildDescriptionXML returns the UPnP description Alexa fetches after SSDP discovery.
+// URLBase uses discovery_port so Alexa routes subsequent API calls correctly.
 func buildDescriptionXML(info identity.BridgeInfo) string {
 	fullUUID := uuidPrefix + info.Suffix
-	urlBase := fmt.Sprintf("http://%s:%d/", info.IP, info.Port)
-	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" ?>
+	dPort := info.DiscoveryPort
+	if dPort <= 0 {
+		dPort = info.Port
+	}
+	urlBase := fmt.Sprintf("http://%s:%d/", info.IP, dPort)
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <root xmlns="urn:schemas-upnp-org:device-1-0">
-<specVersion>
-<major>1</major>
-<minor>0</minor>
-</specVersion>
-<URLBase>%s</URLBase>
-<device>
-<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>
-<friendlyName>Philips hue (%s)</friendlyName>
-<manufacturer>Royal Philips Electronics</manufacturer>
-<manufacturerURL>http://www.philips.com</manufacturerURL>
-<modelDescription>Philips hue Personal Wireless Lighting</modelDescription>
-<modelName>Philips hue bridge 2015</modelName>
-<modelNumber>%s</modelNumber>
-<modelURL>http://www.meethue.com</modelURL>
-<serialNumber>%s</serialNumber>
-<UDN>uuid:%s</UDN>
-</device>
-</root>
-`, urlBase, info.IP, modelID, info.BridgeID, fullUUID)
+  <specVersion>
+    <major>1</major>
+    <minor>0</minor>
+  </specVersion>
+  <URLBase>%s</URLBase>
+  <device>
+    <deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>
+    <friendlyName>Philips hue (%s)</friendlyName>
+    <manufacturer>Royal Philips Electronics</manufacturer>
+    <manufacturerURL>http://www.philips.com</manufacturerURL>
+    <modelDescription>Philips hue Personal Wireless Lighting</modelDescription>
+    <modelName>Philips hue bridge 2015</modelName>
+    <modelNumber>%s</modelNumber>
+    <modelURL>http://www.meethue.com</modelURL>
+    <serialNumber>%s</serialNumber>
+    <UDN>uuid:%s</UDN>
+    <presentationURL>index.html</presentationURL>
+    <iconList>
+      <icon>
+        <mimetype>image/png</mimetype>
+        <height>48</height>
+        <width>48</width>
+        <depth>24</depth>
+        <url>hue_logo_0.png</url>
+      </icon>
+      <icon>
+        <mimetype>image/png</mimetype>
+        <height>120</height>
+        <width>120</width>
+        <depth>24</depth>
+        <url>hue_logo_3.png</url>
+      </icon>
+    </iconList>
+  </device>
+</root>`, urlBase, info.IP, modelID, info.BridgeID, fullUUID)
 }
 
 func firstLine(s string) string {

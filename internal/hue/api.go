@@ -111,20 +111,38 @@ func (a *API) buildConfig() map[string]interface{} {
 	now := time.Now()
 	return map[string]interface{}{
 		"name":             "EchoLox",
+		"zigbeechannel":    11,
 		"bridgeid":         a.info.BridgeID,
 		"mac":              a.info.MAC,
 		"ipaddress":        a.info.IP,
+		"netmask":          "255.255.255.0",
+		"gateway":          "0.0.0.0",
 		"dhcp":             true,
+		"proxyaddress":     "none",
+		"proxyport":        0,
 		"UTC":              now.UTC().Format("2006-01-02T15:04:05"),
 		"localtime":        now.Format("2006-01-02T15:04:05"),
 		"timezone":         "Europe/Vienna",
 		"modelid":          "BSB002",
-		"datastoreversion": "95",
-		"swversion":        "01003542",
-		"apiversion":       "1.17.0",
-		"linkbutton":       true,
+		"datastoreversion": "93",
+		"swversion":        "01061424042",
+		"apiversion":       "1.47.0",
+		"linkbutton":       false,
 		"portalservices":   false,
-		"whitelist":        map[string]interface{}{"api": map[string]string{"name": "EchoLox"}},
+		"portalconnection": "disconnected",
+		"portalstate": map[string]interface{}{
+			"signedon":      false,
+			"incoming":      false,
+			"outgoing":      false,
+			"communication": "disconnected",
+		},
+		"factorynew":       false,
+		"replacesbridgeid": nil,
+		"backup": map[string]interface{}{
+			"status":    "idle",
+			"errorcode": 0,
+		},
+		"whitelist": map[string]interface{}{},
 	}
 }
 
@@ -279,33 +297,29 @@ func (a *API) buildGroupsMap(lights map[string]interface{}) map[string]interface
 	return map[string]interface{}{"0": group0}
 }
 
-// deviceToLight builds the Hue light object. Modelled after HA's state_to_json:
-// minimal fields, "mode":"homeautomation" in state, no capabilities blob.
+// deviceToLight builds the full Hue light object for a device.
 func (a *API) deviceToLight(d *device.Device) map[string]interface{} {
 	s := a.mgr.GetState(d.ID)
-	lightType, modelid := lightMeta(d.Type)
+	lightType, modelid, productname := lightMeta(d.Type)
+
+	colormode := s.ColorMode
+	if colormode == "" && d.Type == device.TypeColor {
+		colormode = "ct"
+	}
 
 	stateMap := map[string]interface{}{
 		"on":        s.On,
+		"bri":       s.Brightness,
 		"alert":     "none",
-		"mode":      "homeautomation",
+		"effect":    "none",
 		"reachable": true,
 	}
-	switch d.Type {
-	case device.TypeColor:
-		colormode := s.ColorMode
-		if colormode == "" {
-			colormode = "ct"
-		}
-		stateMap["bri"] = s.Brightness
+	if d.Type == device.TypeColor || d.Type == device.TypeDimmer {
 		stateMap["hue"] = s.Hue
 		stateMap["sat"] = s.Saturation
 		stateMap["xy"] = []float64{0.3127, 0.3290}
 		stateMap["ct"] = s.ColorTemp
 		stateMap["colormode"] = colormode
-		stateMap["effect"] = "none"
-	case device.TypeDimmer:
-		stateMap["bri"] = s.Brightness
 	}
 
 	return map[string]interface{}{
@@ -313,22 +327,50 @@ func (a *API) deviceToLight(d *device.Device) map[string]interface{} {
 		"type":             lightType,
 		"name":             d.Name,
 		"modelid":          modelid,
-		"manufacturername": "Home Assistant",
-		"swversion":        "123",
+		"manufacturername": "Signify Netherlands B.V.",
+		"productname":      productname,
 		"uniqueid":         hueUniqueID(d.HueID),
+		"swversion":        "67.91.213",
+		"capabilities":     buildCapabilities(d.Type),
 	}
 }
 
-func lightMeta(t device.DeviceType) (lightType, modelid string) {
+func lightMeta(t device.DeviceType) (lightType, modelid, productname string) {
 	switch t {
 	case device.TypeColor:
-		return "Extended color light", "LCT015"
+		return "Extended color light", "LCT015", "Hue color lamp"
 	case device.TypeDimmer:
-		return "Dimmable light", "LWB006"
+		return "Dimmable light", "LWB006", "Hue White lamp"
+	case device.TypeScene, device.TypeSwitch:
+		return "On/Off plug-in unit", "LOM001", "Hue Smart plug"
 	default:
-		// "On/Off light" (not "plug-in unit") so Alexa classifies it as a light
-		return "On/Off light", "LOM001"
+		return "On/Off plug-in unit", "LOM001", "Hue Smart plug"
 	}
+}
+
+func buildCapabilities(t device.DeviceType) map[string]interface{} {
+	cap := map[string]interface{}{
+		"certified": true,
+		"streaming": map[string]interface{}{"renderer": false, "proxy": false},
+	}
+	switch t {
+	case device.TypeColor:
+		cap["control"] = map[string]interface{}{
+			"mindimlevel":    200,
+			"maxlumen":       800,
+			"colorgamuttype": "C",
+			"colorgamut":     [][]float64{{0.6915, 0.3083}, {0.17, 0.7}, {0.1532, 0.0475}},
+			"ct":             map[string]int{"min": 153, "max": 500},
+		}
+	case device.TypeDimmer:
+		cap["control"] = map[string]interface{}{
+			"mindimlevel": 200,
+			"maxlumen":    800,
+		}
+	default:
+		cap["control"] = map[string]interface{}{}
+	}
+	return cap
 }
 
 // hueUniqueID returns a MAC-format uniqueid for a Hue light.

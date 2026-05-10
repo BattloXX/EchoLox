@@ -3,79 +3,54 @@
 package upnp
 
 import (
+	"context"
 	"fmt"
 	"net"
-	"os"
 	"syscall"
 	"unsafe"
 )
 
-// soReusePort is the Linux socket option constant for SO_REUSEPORT.
-// syscall.SO_REUSEPORT is missing from the Go standard library on ARM targets,
-// so we define the raw value directly (15 on all Linux architectures).
-const soReusePort = 15
+const soReusePort = 0xf // SO_REUSEPORT (Linux, all arches)
 
-// listenMulticast creates a UDP multicast socket on 239.255.255.250:1900.
-// EchoLox expects exclusive ownership of port 1900 (LoxBerry ssdpd must be disabled).
-// SO_REUSEADDR + SO_REUSEPORT are kept defensively for clean service restarts.
-// IP_ADD_MEMBERSHIP and IP_MULTICAST_IF are set via raw Syscall6 for ARM cross-compile
-// compatibility (syscall.SetsockoptIpMreq struct layout differs on ARM).
-func listenMulticast(localIP net.IP) (*net.UDPConn, error) {
-	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_UDP)
+// listenMulticast binds to UDP 0.0.0.0:1900 with SO_REUSEPORT so EchoLox can
+// coexist with the LoxBerry system ssdpd that already holds port 1900.
+func listenMulticast() (*net.UDPConn, error) {
+	lc := net.ListenConfig{
+		Control: func(_, _ string, c syscall.RawConn) error {
+			return c.Control(func(fd uintptr) {
+				syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
+				syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, soReusePort, 1)
+			})
+		},
+	}
+	pc, err := lc.ListenPacket(context.Background(), "udp4", "0.0.0.0:1900")
 	if err != nil {
-		return nil, fmt.Errorf("socket: %w", err)
+		return nil, err
 	}
-
-	if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); err != nil {
-		syscall.Close(fd)
-		return nil, fmt.Errorf("SO_REUSEADDR: %w", err)
+	conn := pc.(*net.UDPConn)
+	raw, err := conn.SyscallConn()
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("syscall conn: %w", err)
 	}
-	if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, soReusePort, 1); err != nil {
-		syscall.Close(fd)
-		return nil, fmt.Errorf("SO_REUSEPORT: %w", err)
+	mreq := syscall.IPMreq{
+		Multiaddr: [4]byte{239, 255, 255, 250},
 	}
-
-	sa := &syscall.SockaddrInet4{Port: 1900}
-	if err := syscall.Bind(fd, sa); err != nil {
-		syscall.Close(fd)
-		return nil, fmt.Errorf("bind 0.0.0.0:1900: %w", err)
-	}
-
-	// IP_ADD_MEMBERSHIP: [4]byte multicast addr + [4]byte local iface addr = 8 bytes
-	mreq := [8]byte{239, 255, 255, 250, 0, 0, 0, 0}
-	if ip4 := localIP.To4(); ip4 != nil && !localIP.Equal(net.IPv4zero) {
-		copy(mreq[4:], ip4)
-	}
-	if _, _, errno := syscall.Syscall6(
-		syscall.SYS_SETSOCKOPT,
-		uintptr(fd), syscall.IPPROTO_IP, syscall.IP_ADD_MEMBERSHIP,
-		uintptr(unsafe.Pointer(&mreq[0])), 8, 0,
-	); errno != 0 {
-		syscall.Close(fd)
-		return nil, fmt.Errorf("IP_ADD_MEMBERSHIP: %w", errno)
-	}
-
-	// IP_MULTICAST_IF: outgoing multicast interface (non-fatal if it fails)
-	if ip4 := localIP.To4(); ip4 != nil && !localIP.Equal(net.IPv4zero) {
-		var iface [4]byte
-		copy(iface[:], ip4)
-		syscall.Syscall6(
+	var joinErr syscall.Errno
+	raw.Control(func(fd uintptr) {
+		_, _, joinErr = syscall.Syscall6(
 			syscall.SYS_SETSOCKOPT,
-			uintptr(fd), syscall.IPPROTO_IP, syscall.IP_MULTICAST_IF,
-			uintptr(unsafe.Pointer(&iface[0])), 4, 0,
+			fd,
+			syscall.IPPROTO_IP,
+			syscall.IP_ADD_MEMBERSHIP,
+			uintptr(unsafe.Pointer(&mreq)),
+			unsafe.Sizeof(mreq),
+			0,
 		)
-	}
-
-	f := os.NewFile(uintptr(fd), "ssdp-multicast")
-	pc, err := net.FilePacketConn(f)
-	f.Close() // FilePacketConn duplicates the fd
-	if err != nil {
-		return nil, fmt.Errorf("FilePacketConn: %w", err)
-	}
-	conn, ok := pc.(*net.UDPConn)
-	if !ok {
-		pc.Close()
-		return nil, fmt.Errorf("unexpected PacketConn type")
+	})
+	if joinErr != 0 {
+		conn.Close()
+		return nil, fmt.Errorf("join multicast group: %w", joinErr)
 	}
 	return conn, nil
 }
