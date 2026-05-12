@@ -268,6 +268,10 @@ function renderStatus() {
 // ── Settings ───────────────────────────────────────────────────────────────
 
 async function loadSettings() {
+  // Show a random example UUID in the hint text
+  const exEl = document.getElementById('uuidExample');
+  if (exEl) exEl.textContent = randomHex12();
+
   // Load miniserver list from LoxBerry
   const msRes = await fetch(`${API}/miniservers`);
   const miniservers = await msRes.json() || [];
@@ -299,6 +303,8 @@ async function loadSettings() {
         const p = document.getElementById('serverPort');
         if (p) p.value = cfg.port;
       }
+      const uuidEl = document.getElementById('bridgeUUID');
+      if (uuidEl && cfg.uuid) uuidEl.value = cfg.uuid;
 
       if (cfg.mqtt_broker) {
         const m = document.getElementById('mqttBroker');
@@ -314,12 +320,20 @@ async function loadSettings() {
   if (form) {
     form.addEventListener('submit', async e => {
       e.preventDefault();
+      const uuidVal = (document.getElementById('bridgeUUID')?.value || '').toLowerCase().trim();
+      if (uuidVal && !/^[0-9a-f]{12}$/.test(uuidVal)) {
+        const notice = document.getElementById('saveNotice');
+        if (notice) { notice.textContent = '✗ UUID muss genau 12 Hex-Zeichen haben (0-9, a-f)'; notice.style.color = '#e53e3e'; }
+        setTimeout(() => { if (notice) { notice.textContent = ''; notice.style.color = ''; } }, 4000);
+        return;
+      }
       const pwEl = document.getElementById('mqttPassword');
       const body = {
-        miniserver: document.getElementById('miniserver')?.value || '',
-        transport:  document.getElementById('loxTransport')?.value || 'http',
-        udp_port:   parseInt(document.getElementById('udpPort')?.value) || 7777,
-        port:         parseInt(document.getElementById('serverPort')?.value) || 80,
+        miniserver:     document.getElementById('miniserver')?.value || '',
+        transport:      document.getElementById('loxTransport')?.value || 'http',
+        udp_port:       parseInt(document.getElementById('udpPort')?.value) || 7777,
+        port:           parseInt(document.getElementById('serverPort')?.value) || 80,
+        uuid:           uuidVal,
         mqtt_broker:    document.getElementById('mqttBroker')?.value || '',
         mqtt_username:  document.getElementById('mqttUsername')?.value || '',
         mqtt_password:  pwEl ? pwEl.value : undefined,
@@ -335,6 +349,10 @@ async function loadSettings() {
       setTimeout(() => { if (notice) notice.textContent = ''; }, 4000);
     });
   }
+}
+
+function randomHex12() {
+  return Array.from({length: 12}, () => Math.floor(Math.random() * 16).toString(16)).join('');
 }
 
 async function testConnection() {

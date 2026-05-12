@@ -4,6 +4,7 @@ package identity
 
 import (
 	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"strings"
 )
@@ -19,17 +20,26 @@ type BridgeInfo struct {
 	Suffix        string // 12-char lowercase hex suffix (last part of UUID)
 }
 
-// New derives a stable bridge identity from the IP address.
-// salt (from upnp.uuid in config) lets users force a new UUID when Alexa has a stale cached pairing.
+// New derives a stable bridge identity.
+// If salt is exactly 12 lowercase hex characters it is used verbatim as the UUID
+// suffix — this lets operators set an explicit, predictable UUID in the config.
+// Any other salt value (including the legacy "2") is mixed into an MD5 seed so
+// old installations keep their existing derived identity.
 func New(ip string, port, discoveryPort int, salt string) BridgeInfo {
-	seed := "echolox-bridge:" + ip
-	if salt != "" {
-		seed = "echolox-bridge:" + salt + ":" + ip
+	var suffix string
+	if isHex12(salt) {
+		suffix = strings.ToLower(salt)
+	} else {
+		seed := "echolox-bridge:" + ip
+		if salt != "" {
+			seed = "echolox-bridge:" + salt + ":" + ip
+		}
+		h := md5.Sum([]byte(seed))
+		suffix = fmt.Sprintf("%012x", h[:6])
 	}
-	h := md5.Sum([]byte(seed))
-	suffix := fmt.Sprintf("%012x", h[:6])
+	b, _ := hex.DecodeString(suffix)
 	bridgeID := strings.ToUpper("001788fffe" + suffix[6:])
-	mac := fmt.Sprintf("00:17:88:%02x:%02x:%02x", h[3], h[4], h[5])
+	mac := fmt.Sprintf("00:17:88:%02x:%02x:%02x", b[3], b[4], b[5])
 	return BridgeInfo{
 		IP:            ip,
 		Port:          port,
@@ -39,4 +49,13 @@ func New(ip string, port, discoveryPort int, salt string) BridgeInfo {
 		MAC:           mac,
 		Suffix:        suffix,
 	}
+}
+
+// isHex12 returns true if s is exactly 12 valid hexadecimal characters.
+func isHex12(s string) bool {
+	if len(s) != 12 {
+		return false
+	}
+	_, err := hex.DecodeString(s)
+	return err == nil
 }

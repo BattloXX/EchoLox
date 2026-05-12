@@ -3,6 +3,7 @@ package api
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -274,6 +275,7 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 			"transport":     cfg.Loxone.Transport,
 			"udp_port":      cfg.Loxone.UDPPort,
 			"port":          cfg.Server.Port,
+			"uuid":          cfg.UPNP.UUID,
 			"mqtt_broker":   cfg.MQTT.Broker,
 			"mqtt_username": cfg.MQTT.Username,
 			"mqtt_password": cfg.MQTT.Password,
@@ -285,12 +287,17 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 			Transport    string  `json:"transport"`
 			UDPPort      int     `json:"udp_port"`
 			Port         int     `json:"port"`
+			UUID         string  `json:"uuid"`
 			MQTTBroker   string  `json:"mqtt_broker"`
 			MQTTUsername string  `json:"mqtt_username"`
 			MQTTPassword *string `json:"mqtt_password"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), 400)
+			return
+		}
+		if req.UUID != "" && !isValidUUID(req.UUID) {
+			http.Error(w, `{"error":"uuid muss genau 12 hexadezimale Zeichen enthalten (0-9, a-f), z.B. a1b2c3d4e5f6"}`, 400)
 			return
 		}
 		cfg := readCfg()
@@ -306,6 +313,7 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 		if req.Port > 0 {
 			cfg.Server.Port = req.Port
 		}
+		cfg.UPNP.UUID = strings.ToLower(req.UUID)
 		if req.MQTTBroker != "" {
 			cfg.MQTT.Broker = req.MQTTBroker
 		}
@@ -330,7 +338,7 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, map[string]string{
 			"status":  "ok",
-			"message": "Gespeichert — EchoLox neu starten um Portänderungen zu übernehmen",
+			"message": "Gespeichert — EchoLox neu starten, damit alle Änderungen aktiv werden",
 		})
 
 	default:
@@ -765,4 +773,12 @@ func writeErr(w http.ResponseWriter, code int, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+}
+
+func isValidUUID(s string) bool {
+	if len(s) != 12 {
+		return false
+	}
+	_, err := hex.DecodeString(s)
+	return err == nil
 }

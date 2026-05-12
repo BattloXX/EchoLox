@@ -23,17 +23,18 @@
 </nav>
 <div class="container">
   <h1>Einstellungen</h1>
-  <div class="card" style="background:#fff8e1;border-left:4px solid #f59e0b;margin-bottom:1rem;padding:1rem">
-    <strong>Voraussetzungen für Alexa-Discovery:</strong>
-    <ol style="margin:0.5rem 0 0 1.2rem;padding:0">
-      <li>LoxBerry-Webinterface-Port von 80 auf 88 verschieben (LoxBerry-Einstellungen → System)</li>
-      <li>LoxBerry-SSDP-Dienst deaktivieren: <code>systemctl disable --now lbssdpd</code></li>
-      <li>EchoLox-Plugin (re)installieren — <code>postinstall.sh</code> setzt automatisch die nötigen Rechte</li>
-    </ol>
-    <p style="margin:0.5rem 0 0">EchoLox läuft danach <strong>exklusiv auf Port 80</strong> und besitzt SSDP (Port 1900) allein. Kein Reverse-Proxy nötig.</p>
-  </div>
   <div class="card">
     <form id="settingsForm">
+      <div class="form-group">
+        <label>Bridge-UUID (Alexa-Identität)</label>
+        <input type="text" id="bridgeUUID" placeholder="z.B. a1b2c3d4e5f6" maxlength="12" pattern="[0-9a-fA-F]{12}" style="font-family:monospace">
+        <small style="color:#888;display:block;margin-top:4px">
+          12 hexadezimale Zeichen (0–9, a–f). Diese UUID legt fest, wie Alexa die Bridge eindeutig identifiziert.
+          <strong>Wenn Alexa nur alte oder keine Geräte anzeigt:</strong> Trage hier einen neuen zufälligen Wert ein (z.B. <code id="uuidExample"></code>),
+          speichere, starte EchoLox neu und führe in der Alexa-App „Geräte suchen" durch.
+          Eine geänderte UUID zwingt Alexa zur vollständigen Neu-Erkennung der Bridge und aller Geräte.
+        </small>
+      </div>
       <div class="form-group">
         <label>Miniserver</label>
         <select id="miniserver"></select>
@@ -53,7 +54,6 @@
       <div class="form-group">
         <label>EchoLox Port</label>
         <input type="number" id="serverPort" value="80">
-        <small style="color:#888;display:block;margin-top:4px">Standard: 80 (direkt, kein Proxy). Voraussetzungen: LoxBerry-Adminport auf 88, lbssdpd deaktiviert.</small>
       </div>
       <div class="form-group">
         <label>MQTT Broker</label>
