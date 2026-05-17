@@ -48,26 +48,33 @@ EchoLox belegt Port 80 und Port 1900 (SSDP) exklusiv. Diese beiden Schritte sind
 
 ==== 1. LoxBerry-Webinterface auf Port 88 verschieben ====
 
-LoxBerry nutzt standardmäßig Port 80 für seine Admin-Oberfläche. Da EchoLox Port 80 direkt belegt, muss Apache2 auf einen anderen Port wechseln.
+LoxBerry nutzt standardmäßig Port 80 für seine Admin-Oberfläche. Da EchoLox Port 80 direkt belegt, muss der Webserver-Port geändert werden.
 
-<code bash>
-# /etc/apache2/ports.conf  →  Listen 88 (statt Listen 80)
-# Alle VHost-Definitionen von *:80 auf *:88 ändern
-apache2ctl graceful
-</code>
-
-Alternativ über **LoxBerry → System → Netzwerk** (falls ein Port-Feld vorhanden ist).
+**Über die LoxBerry-Oberfläche (empfohlen):**
+  - LoxBerry Admin öffnen → **Hauptmenü → LoxBerry Dienste**
+  - Tab **Webserver** auswählen
+  - Feld **HTTP Web Port** auf ''88'' setzen
+  - **Speichern** klicken
 
 Nach der Änderung: LoxBerry Admin unter ''http://<loxberry-ip>:88'' erreichbar.
 
+<note>
+Alternativ per SSH: ''/etc/apache2/ports.conf'' → ''Listen 88'', alle VHost-Definitionen von ''*:80'' auf ''*:88'' ändern, dann ''apache2ctl graceful''.
+</note>
+
 ==== 2. LoxBerry-SSDP-Dienst deaktivieren ====
 
-LoxBerry bringt einen eigenen SSDP-Daemon mit, der Port 1900 belegt:
+LoxBerry bringt einen eigenen SSDP-Daemon mit, der Port 1900 belegt. Dieser muss deaktiviert werden, damit EchoLox SSDP exklusiv nutzen kann.
 
-<code bash>
-systemctl disable --now lbssdpd
-# Prüfen: ss -ulnp | grep 1900   →  kein Eintrag
-</code>
+**Über die LoxBerry-Oberfläche (empfohlen):**
+  - LoxBerry Admin öffnen → **Hauptmenü → LoxBerry Dienste**
+  - Tab **Weitere Optionen** auswählen
+  - Unter **SSDP Veröffentlichung** den Schalter auf **Aus** stellen
+  - **Speichern** klicken
+
+<note>
+Alternativ per SSH: ''systemctl disable --now lbssdpd''\\ Prüfen: ''ss -ulnp | grep 1900'' → kein Eintrag
+</note>
 
 ----
 
