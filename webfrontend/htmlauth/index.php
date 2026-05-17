@@ -3,8 +3,8 @@
 $lbhome = getenv('LBHOMEDIR');
 if (!$lbhome) $lbhome = '/opt/loxberry';
 
-// Read port from config (default 8083)
-$port = 8079;
+// Read port from config (default 80)
+$port = 80;
 $cfgfile = "$lbhome/config/plugins/EchoLox/EchoLox.cfg";
 if (file_exists($cfgfile)) {
     foreach (file($cfgfile) as $line) {
@@ -15,9 +15,10 @@ if (file_exists($cfgfile)) {
     }
 }
 
-// Build EchoLox URL: same host, different port
+// Build EchoLox URL: same host, port 80 omitted (standard HTTP)
 $host = preg_replace('/:\d+$/', '', $_SERVER['HTTP_HOST'] ?? 'localhost');
-$uiUrl = 'http://' . htmlspecialchars($host, ENT_QUOTES) . ':' . $port . '/ui/';
+$portSuffix = ($port === 80) ? '' : ':' . $port;
+$uiUrl = 'http://' . htmlspecialchars($host, ENT_QUOTES) . $portSuffix . '/echoloxui/';
 ?>
 <!DOCTYPE html>
 <html lang="de">

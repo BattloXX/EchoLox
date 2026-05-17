@@ -13,9 +13,10 @@ import (
 type Level int
 
 const (
-	LevelInfo  Level = 0
-	LevelDebug Level = 1
-	BufSize          = 2000
+	LevelInfo   Level = 0
+	LevelDebug  Level = 1
+	BufSize           = 2000
+	maxFileSize       = 5 * 1024 * 1024 // 5 MB
 )
 
 // Entry is one log line stored in the ring buffer.
@@ -27,12 +28,14 @@ type Entry struct {
 
 // Logger is a ring-buffer backed logger with optional file output.
 type Logger struct {
-	mu    sync.RWMutex
-	buf   [BufSize]Entry
-	head  int // next write index (mod BufSize)
-	count int // number of valid entries (capped at BufSize)
-	level Level
-	file  *os.File
+	mu        sync.RWMutex
+	buf       [BufSize]Entry
+	head      int // next write index (mod BufSize)
+	count     int // number of valid entries (capped at BufSize)
+	level     Level
+	file      *os.File
+	filePath  string
+	fileBytes int64
 }
 
 // Global is the process-wide logger. Wire it with log.SetOutput(Global.Writer()).
@@ -56,6 +59,8 @@ func (l *Logger) SetFile(path string) error {
 		l.mu.Lock()
 		old := l.file
 		l.file = nil
+		l.filePath = ""
+		l.fileBytes = 0
 		l.mu.Unlock()
 		if old != nil {
 			old.Close()
@@ -66,14 +71,37 @@ func (l *Logger) SetFile(path string) error {
 	if err != nil {
 		return err
 	}
+	var size int64
+	if info, err := f.Stat(); err == nil {
+		size = info.Size()
+	}
 	l.mu.Lock()
 	old := l.file
 	l.file = f
+	l.filePath = path
+	l.fileBytes = size
 	l.mu.Unlock()
 	if old != nil {
 		old.Close()
 	}
 	return nil
+}
+
+// rotate renames the current log file to .bak and opens a fresh one.
+// Must be called with l.mu held.
+func (l *Logger) rotate() {
+	if l.file == nil {
+		return
+	}
+	l.file.Close()
+	_ = os.Rename(l.filePath, l.filePath+".bak")
+	f, err := os.OpenFile(l.filePath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err != nil {
+		l.file = nil
+		return
+	}
+	l.file = f
+	l.fileBytes = 0
 }
 
 func (l *Logger) Info(format string, args ...interface{}) {
@@ -98,7 +126,11 @@ func (l *Logger) write(msgLevel Level, levelStr, msg string) {
 	}
 	line := e.T.Format("2006-01-02 15:04:05") + " [" + levelStr + "] " + msg + "\n"
 	if l.file != nil {
-		_, _ = l.file.WriteString(line)
+		if l.fileBytes >= maxFileSize {
+			l.rotate()
+		}
+		n, _ := l.file.WriteString(line)
+		l.fileBytes += int64(n)
 	}
 	_, _ = os.Stderr.WriteString(line)
 }
