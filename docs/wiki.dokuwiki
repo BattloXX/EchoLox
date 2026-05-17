@@ -1,0 +1,351 @@
+====== EchoLox ======
+**Philips Hue Bridge Emulator für Loxone & Amazon Alexa**\\
+LoxBerry Plugin · Autor: Johannes Battlogg · [[https://github.com/BattloXX/EchoLox|GitHub]]
+
+EchoLox emuliert eine Philips Hue Bridge (Generation 2, BSB002) direkt auf dem LoxBerry. Amazon Alexa erkennt den LoxBerry dadurch als echte Hue Bridge und kann Loxone Virtual Inputs schalten — komplett **lokal**, ohne Cloud-Anbindung, ohne Java, ohne Reverse Proxy.
+
+<note important>
+EchoLox belegt **Port 80 direkt** (kein Apache-Proxy mehr). Vor der Installation muss das LoxBerry-Webinterface auf einen anderen Port (z. B. 88) verschoben werden. Bitte das Kapitel [[#einmaliges_setup|Einmaliges Setup]] sorgfältig lesen.
+</note>
+
+----
+
+===== Funktionsprinzip =====
+
+<code>
+Alexa
+  │  SSDP Discovery  (UDP :1900)
+  │  Hue-API         (HTTP :80)
+  ▼
+EchoLox  (LoxBerry Plugin, Port 80 – direkt, kein Proxy)
+  │  HTTP GET  /dev/sps/io/{name}/{value}   (Basic Auth)
+  │  oder UDP  {name}={value}               (Port 7777)
+  │  oder MQTT loxone/{name}
+  ▼
+Loxone Miniserver  →  Virtual Inputs  →  Logik
+</code>
+
+Loxone bleibt die einzige Automations-Zentrale. EchoLox ist ausschließlich die Brücke zwischen Alexa und Loxone.
+
+----
+
+===== Voraussetzungen =====
+
+^ Komponente         ^ Mindestversion ^
+| LoxBerry           | 2.0 (RPi, aarch64, x86) |
+| Loxone Miniserver  | beliebig |
+| Amazon Echo        | beliebiges Modell |
+
+<note>
+Echo und LoxBerry müssen im **gleichen Subnetz** sein — SSDP-Discovery funktioniert nicht über Router-Grenzen hinweg.
+</note>
+
+----
+
+===== Einmaliges Setup =====
+
+EchoLox belegt Port 80 und Port 1900 (SSDP) exklusiv. Diese beiden Schritte sind **vor der Plugin-Installation** erforderlich:
+
+==== 1. LoxBerry-Webinterface auf Port 88 verschieben ====
+
+LoxBerry nutzt standardmäßig Port 80 für seine Admin-Oberfläche. Da EchoLox Port 80 direkt belegt, muss Apache2 auf einen anderen Port wechseln.
+
+<code bash>
+# /etc/apache2/ports.conf  →  Listen 88 (statt Listen 80)
+# Alle VHost-Definitionen von *:80 auf *:88 ändern
+apache2ctl graceful
+</code>
+
+Alternativ über **LoxBerry → System → Netzwerk** (falls ein Port-Feld vorhanden ist).
+
+Nach der Änderung: LoxBerry Admin unter ''http://<loxberry-ip>:88'' erreichbar.
+
+==== 2. LoxBerry-SSDP-Dienst deaktivieren ====
+
+LoxBerry bringt einen eigenen SSDP-Daemon mit, der Port 1900 belegt:
+
+<code bash>
+systemctl disable --now lbssdpd
+# Prüfen: ss -ulnp | grep 1900   →  kein Eintrag
+</code>
+
+----
+
+===== Installation =====
+
+  - LoxBerry Admin öffnen (''http://<loxberry-ip>:88'') → **Plugin Manager**
+  - **Plugin installieren** → **Von URL installieren**
+  - ZIP-URL aus dem [[https://github.com/BattloXX/EchoLox/releases/latest|GitHub Releases Tab]] einfügen
+  - Nach der Installation erscheint **EchoLox** in der LoxBerry Navigation
+  - Das ''postinstall.sh'' setzt automatisch ''CAP_NET_BIND_SERVICE'' auf das Binary (Port 80 ohne Root)
+
+**Dienst prüfen:**
+<code>
+http://<loxberry-ip>/description.xml
+→  XML mit "Philips hue bridge 2015"
+</code>
+
+**Autoupdate:** EchoLox unterstützt den LoxBerry Plugin-Autoupdater. Neue Versionen werden automatisch erkannt und können über den Plugin Manager installiert werden.
+
+----
+
+===== Konfiguration =====
+
+==== Einstellungen (Web-UI) ====
+
+EchoLox öffnen: **LoxBerry → EchoLox** oder direkt ''http://<loxberry-ip>/echoloxui/settings.html''
+
+^ Einstellung        ^ Standard               ^ Beschreibung ^
+| Miniserver         | (aus LoxBerry)         | Welcher Miniserver verwendet wird |
+| Transport          | HTTP                   | Übertragungsprotokoll: HTTP, UDP oder MQTT |
+| UDP Port           | 7777                   | Port für UDP-Transport |
+| EchoLox Port       | 80                     | Port auf dem EchoLox lauscht |
+| Bridge-UUID        | (automatisch)          | Hue-Identität; ändern zwingt Alexa zur Neu-Erkennung |
+| MQTT Broker        | tcp://localhost:1883   | Broker-URL |
+| MQTT Benutzer/PW   | —                      | Optionale MQTT-Authentifizierung |
+
+==== Konfigurationsdatei ====
+
+Pfad: ''/opt/loxberry/config/plugins/EchoLox/EchoLox.cfg''
+
+<code yaml>
+server:
+  port: 80             # Direkt, kein Reverse Proxy nötig
+  discovery_port: 0    # 0 = wie port; nur bei Proxy auf externen Port setzen
+  ip: ""               # Leer = automatisch ermittelt
+
+upnp:
+  name: "EchoLox"
+
+loxone:
+  miniserver: "1"      # Miniserver-ID aus LoxBerry-Konfiguration
+  transport: "http"    # http | udp | mqtt
+  udp_port: 7777
+
+mqtt:
+  broker: "tcp://localhost:1883"
+  username: ""
+  password: ""
+</code>
+
+Miniserver-IP und Credentials werden automatisch aus der LoxBerry-Systemkonfiguration gelesen — keine manuelle Eingabe nötig.
+
+----
+
+===== Geräte einrichten =====
+
+==== Gerätetypen ====
+
+^ Typ      ^ Alexa-Befehle                    ^ Generierte Virtual Inputs ^
+| switch   | Ein/Aus                          | ''{name}_on'', ''{name}_off'' |
+| dimmer   | Ein/Aus, Helligkeit %            | ''{name}_on'', ''{name}_off'', ''{name}_brightness'' |
+| color    | Ein/Aus, Helligkeit, Farbe (HSB) | ''{name}_on'', ''{name}_off'', ''{name}_brightness'', ''{name}_hue'', ''{name}_saturation'' |
+| scene    | "Alexa, aktiviere …"             | ''{name}_activate'' |
+
+Alle Virtual Input Namen haben automatisch den Prefix ''echolox_''.
+
+==== Namensnormalisierung ====
+
+^ Eingabe in EchoLox ^ Prefix in Loxone ^
+| ''Wohnzimmer Licht'' | ''echolox_wohnzimmer_licht_'' |
+| ''Küche Decke''      | ''echolox_kueche_decke_'' |
+| ''Terrasse Süd''     | ''echolox_terrasse_sued_'' |
+
+Regeln: Kleinbuchstaben, Umlaute → ae/oe/ue/ss, Sonderzeichen → Unterstrich.
+
+==== Gerät manuell anlegen ====
+
+**EchoLox → Geräte → + Neu**:
+  - **Name:** z. B. ''Wohnzimmer Licht'' (exakt so, wie Alexa es kennen soll)
+  - **Typ:** ''dimmer''
+  - **Transport:** ''HTTP''
+
+Die generierten Virtual Input Namen werden sofort angezeigt.
+
+==== Virtual Inputs in Loxone Config anlegen ====
+
+Die von EchoLox angezeigten Namen **exakt** in Loxone Config als Virtual Inputs anlegen:
+
+  - **HTTP:** Peripherie → Virtual Inputs → Virtual HTTP Input\\ URL-Pfad: ''/dev/sps/io/{name}/{value}''
+  - **UDP:** Virtual UDP Input, Port 7777\\ Format: ''{name}={value}''
+
+----
+
+===== Loxone Discovery =====
+
+EchoLox kann den konfigurierten Miniserver automatisch nach Virtual Inputs mit dem Prefix ''echolox_'' durchsuchen und passende Geräte vorschlagen.
+
+**EchoLox → Discovery → Miniserver scannen**
+
+Gefundene Virtual Inputs werden als Gerätevorschläge angezeigt und können mit einem Klick importiert werden. Bereits vorhandene Geräte werden übersprungen (keine Duplikate).
+
+----
+
+===== Alexa verbinden =====
+
+==== Erstmalige Erkennung ====
+
+  - **"Alexa, suche nach neuen Geräten"** — oder Alexa-App → Geräte → + → Philips Hue
+  - Alexa findet EchoLox als Philips Hue Bridge und listet alle angelegten Geräte auf
+
+==== Sprachbefehle ====
+
+^ Befehl                                   ^ Was EchoLox sendet ^
+| "Alexa, schalte [Name] ein"              | ''{name}_on = 1'' |
+| "Alexa, schalte [Name] aus"              | ''{name}_off = 1'' |
+| "Alexa, dimme [Name] auf 50 Prozent"     | ''{name}_brightness = 50'' |
+| "Alexa, stelle [Name] auf rot"           | ''{name}_hue = 0'', ''{name}_saturation = 100'' |
+| "Alexa, aktiviere [Szenenname]"          | ''{name}_activate = 1'' |
+
+----
+
+===== Troubleshooting =====
+
+==== Alexa zeigt alte / falsche Geräte ====
+
+Alexa cached Geräte dauerhaft nach ihrer internen ID (''uniqueid''). Wenn Geräte gelöscht und neu angelegt wurden, erscheinen die alten Karteileichen in Alexa — obwohl EchoLox korrekte neue Geräte hat.
+
+Ab **v0.2.4** erzeugt EchoLox stabile, eindeutige ''uniqueid''s für jedes Gerät (basierend auf der internen Geräte-ID, nicht mehr auf dem HueID-Zähler). Ein einmaliger Alexa-Reset räumt die alten Einträge auf:
+
+<note warning>
+**Alexa-Reset: Genau in dieser Reihenfolge vorgehen**
+</note>
+
+  - Desktop-Browser öffnen (//nicht// die mobile Alexa-App — diese löscht unzuverlässig)\\ → ''[[https://alexa.amazon.com]]'' → **Smart Home → Geräte** → ganz nach unten scrollen → **„Alle vergessen"**
+  - EchoLox Web-UI öffnen → **Discovery** → Button **„Alexa sauber neu verbinden (SSDP-Burst senden)"** klicken
+  - **"Alexa, suche nach neuen Geräten"** sagen
+
+Nach diesem einmaligen Reset erscheinen nur noch die aktuellen Geräte und das Problem tritt nicht mehr auf (dank stabiler ''uniqueid'').
+
+==== Alexa findet gar keine Geräte ====
+
+Checkliste:
+
+  - EchoLox läuft auf **Port 80**: ''http://<loxberry-ip>/description.xml'' → XML sichtbar?
+  - **lbssdpd deaktiviert**: ''systemctl is-active lbssdpd'' → muss ''inactive'' sein
+  - **CAP_NET_BIND_SERVICE** gesetzt: ''getcap /opt/loxberry/bin/plugins/EchoLox/EchoLox'' → ''cap_net_bind_service+ep''
+  - Echo und LoxBerry im **gleichen Subnetz**?
+  - EchoLox-Log auf **DEBUG** stellen (EchoLox → Logs), dann "Alexa, suche neue Geräte":
+    - ''SSDP M-SEARCH'' erscheint im Log → EchoLox wird gefunden
+    - Danach ''GET /api/.../lights'' → Alexa liest die Geräteliste
+    - Nichts im Log → Echo erreicht EchoLox nicht (Subnetz/Firewall)
+
+==== Virtual Input wird nicht gefunden (Status: not_found) ====
+
+  - Namen exakt prüfen: EchoLox → Status zeigt den genauen VI-Namen
+  - Loxone Config: Virtual Input-Name muss **buchstabengenau** übereinstimmen
+  - Nach Änderungen in Loxone Config: Programm neu auf den Miniserver übertragen
+
+==== Dienst startet nicht ====
+
+  - Log prüfen: ''journalctl -u echolox'' oder EchoLox → Logs
+  - Port 80 belegt? ''ss -tlnp | grep :80'' → kein anderer Prozess darf Port 80 halten
+  - CAP fehlt: ''sudo setcap cap_net_bind_service+ep /opt/loxberry/bin/plugins/EchoLox/EchoLox''
+
+----
+
+===== Status-Übersicht =====
+
+**EchoLox → Status** — zeigt für jeden Virtual Input den letzten Send-Status:
+
+^ Status        ^ Bedeutung ^
+| ''ok''        | Letzter Send erfolgreich, VI im Miniserver gefunden |
+| ''not_found'' | VI nicht gefunden — Namen in Loxone Config prüfen |
+| ''not_sent''  | Noch kein Befehl seit Start gesendet |
+
+----
+
+===== Backup & Restore =====
+
+**EchoLox → Backup** sichert:
+  - ''EchoLox.cfg'' — alle Einstellungen
+  - ''devices.json'' — alle angelegten Geräte
+
+^ Funktion                   ^ Beschreibung ^
+| Lokal speichern            | ZIP in ''data/backup/'' ablegen |
+| Herunterladen              | ZIP direkt im Browser speichern |
+| Hochladen & Wiederherstellen | Drag & Drop oder Dateiauswahl |
+| Lokalen Backup wiederherstellen | Aus gespeicherter Liste wählen |
+
+Nach der Wiederherstellung: **Einstellungen → Dienst neu starten**.
+
+----
+
+===== Logs & Diagnose =====
+
+**EchoLox → Logs** — Ring-Buffer mit 2000 Einträgen + Datei (max. 5 MB, danach automatische Rotation).
+
+^ Level    ^ Was wird geloggt ^
+| **INFO** (Standard) | Starts, SSDP-Events, API-Aufrufe, Fehler |
+| **DEBUG**           | Zusätzlich: jedes SSDP-Paket, API-Details |
+
+Log-Datei: ''/opt/loxberry/log/plugins/EchoLox/EchoLox.log'' (wird bei 5 MB rotiert → ''.log.bak'')
+
+----
+
+===== Migration von ha-bridge =====
+
+  - **EchoLox → Import** öffnen
+  - ''devices.db'' aus der alten ha-bridge Konfiguration hochladen (Drag & Drop)
+  - Vorschau prüfen → **Importieren**
+
+<note>
+Der VI-Prefix ändert sich von ''ha_'' auf ''echolox_''. Die Virtual Inputs in der Loxone Config müssen entsprechend angepasst werden.
+</note>
+
+----
+
+===== Transports: HTTP, UDP, MQTT =====
+
+==== HTTP (Standard) ====
+<code>
+GET http://<miniserver-ip>/dev/sps/io/<name>/<value>
+Authorization: Basic base64(<user>:<password>)
+</code>
+Credentials und IP werden automatisch aus LoxBerry gelesen. Liefert Bestätigung (zuverlässig).
+
+==== UDP ====
+<code>
+echolox_wohnzimmer_licht_on=1\r\n
+→  Port 7777 (einstellbar)
+</code>
+Kein TCP-Handshake — sehr geringe Latenz.
+
+==== MQTT ====
+EchoLox publisht auf ''loxone/{name}'' mit dem Wert als Payload.
+
+**MQTT Subscriptions (MQTT → Loxone):** Eingehende MQTT-Nachrichten können direkt an Virtual Inputs weitergeleitet werden (EchoLox → Einstellungen → MQTT Subscriptions).
+
+^ Feld      ^ Beispiel                     ^ Beschreibung ^
+| Topic     | ''home/lights/wohnzimmer''   | MQTT-Topic das abonniert wird |
+| Ziel-VI   | ''echolox_wohnzimmer_licht_on'' | Virtual Input der den Wert erhält |
+
+----
+
+===== Technische Details =====
+
+  * **Protokoll:** Philips Hue API v1 über HTTP:80 (lokal; Alexa nutzt für lokale Discovery weiterhin Hue v1, kein CLIP v2 nötig)
+  * **SSDP:** 3 NOTIFY-Varianten beim Start und alle 5 Minuten (''upnp:rootdevice'', ''uuid:<uuid>'', ''urn:schemas-upnp-org:device:Basic:1'')
+  * **uniqueid:** Pro Gerät permanent stabil — aus der internen Geräte-ID (MD5, Hue-MAC-Format) abgeleitet, nie aus dem HueID-Zähler. Überlebt Umbenennen, Reimport, Neustart.
+  * **selfHeal:** Beim Start prüft EchoLox alle Gerätedaten auf Konsistenz (leere IDs, Duplikate, fehlende VIs) und korrigiert automatisch — mit Backup (''devices.json.bak'') vor jeder Änderung.
+  * **Plattformen:** ARMv7 (RPi 2/3), ARM64 (RPi 4/5, aarch64), x86_64
+  * **RAM:** ~10–20 MB (kein Java, kein Interpreter)
+  * **Startup:** < 100 ms
+
+----
+
+===== Changelog =====
+
+^ Version ^ Datum      ^ Änderungen ^
+| 0.2.5   | 2026-05-17 | LoxBerry-Wrapper mit loxberry_web.php; Log-Rotation bei 5 MB; obsolete Reverse-Proxy-Doku entfernt |
+| 0.2.4   | 2026-05-17 | Stabile uniqueid aus Device.ID; selfHeal beim Start; modernes SSDP (3 NT-Varianten, Burst); Alexa-Reset-UI; Loxone Discovery |
+| 0.2.3   | —          | Hue-Identität wiederhergestellt (apiversion 1.47.0, BSB002); SSDP-Listener |
+| 0.2.0   | —          | Erster Loxone-gezielter Neubau in Go; ha-bridge Import |
+
+----
+
+===== Links =====
+
+  * [[https://github.com/BattloXX/EchoLox|GitHub Repository]]
+  * [[https://github.com/BattloXX/EchoLox/releases/latest|Aktuelle Release-Version]]
+  * [[https://github.com/BattloXX/EchoLox/issues|Fehler melden]]

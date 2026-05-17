@@ -1,60 +1,61 @@
 <?php
-// Determine LoxBerry home dir — getenv() is reliable regardless of loxberry_web.php
-$lbhome = getenv('LBHOMEDIR');
-if (!$lbhome) $lbhome = '/opt/loxberry';
+// ─────────────────────────────────────────────────────────────────────────────
+// EchoLox – LoxBerry plugin entry page
+// Opens EchoLox's own web UI (running on port 80) inside the LoxBerry wrapper.
+// ─────────────────────────────────────────────────────────────────────────────
+$lbhome = getenv('LBHOMEDIR') ?: '/opt/loxberry';
 
-// Read port from config (default 80)
+// Load LoxBerry PHP libraries (graceful: skip if not present)
+foreach (["$lbhome/libs/phplib/loxberry_system.php",
+          "$lbhome/libs/phplib/loxberry_web.php"] as $lib) {
+    if (file_exists($lib)) require_once $lib;
+}
+
+// Read server.port from EchoLox YAML config (default: 80)
 $port = 80;
 $cfgfile = "$lbhome/config/plugins/EchoLox/EchoLox.cfg";
 if (file_exists($cfgfile)) {
-    foreach (file($cfgfile) as $line) {
-        if (preg_match('/^\s*port:\s*(\d+)/', $line, $m)) {
+    foreach (file($cfgfile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        // Match "  port: 80" inside the server: block (indented key)
+        if (preg_match('/^\s+port:\s*(\d+)\s*$/', $line, $m)) {
             $port = (int)$m[1];
             break;
         }
     }
 }
 
-// Build EchoLox URL: same host, port 80 omitted (standard HTTP)
-$host = preg_replace('/:\d+$/', '', $_SERVER['HTTP_HOST'] ?? 'localhost');
-$portSuffix = ($port === 80) ? '' : ':' . $port;
-$uiUrl = 'http://' . htmlspecialchars($host, ENT_QUOTES) . $portSuffix . '/echoloxui/';
+// Build the EchoLox UI URL – always on EchoLox's own port, not the LoxBerry port
+$host     = preg_replace('/:\d+$/', '', $_SERVER['HTTP_HOST'] ?? 'localhost');
+$portPart = ($port === 80) ? '' : ':' . $port;
+$uiUrl    = 'http://' . htmlspecialchars($host, ENT_QUOTES) . $portPart . '/echoloxui/';
+
+// ── Render ───────────────────────────────────────────────────────────────────
+
+if (!class_exists('LBWeb')) {
+    // LoxBerry library not available → direct redirect to EchoLox UI
+    header("Location: $uiUrl");
+    exit;
+}
+
+// LoxBerry-integrated wrapper: LoxBerry header/nav + EchoLox as iframe
+echo LBWeb::lbheader('EchoLox', '', '');
 ?>
-<!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>EchoLox</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0f0; }
-    .lb-header {
-      background: #1a73a7;
-      color: white;
-      padding: 10px 20px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 1.1em;
-      font-weight: bold;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
-    .lb-header a { color: #cce; font-size: 0.85em; font-weight: normal; margin-left: auto; text-decoration: none; }
-    iframe {
-      display: block;
-      width: 100%;
-      height: calc(100vh - 46px);
-      border: none;
-      background: white;
-    }
-  </style>
-</head>
-<body>
-  <div class="lb-header">
-    EchoLox
-    <a href="<?= $uiUrl ?>settings.html">Einstellungen</a>
-  </div>
-  <iframe src="<?= $uiUrl ?>" title="EchoLox UI"></iframe>
-</body>
-</html>
+<style>
+  /* iframe fills everything below the LoxBerry navbar */
+  html, body { margin: 0; overflow: hidden; }
+  #echolox-frame { display: block; width: 100%; border: none; background: #f5f5f5; }
+</style>
+<iframe id="echolox-frame" src="<?= $uiUrl ?>" title="EchoLox UI" scrolling="auto"></iframe>
+<script>
+(function () {
+  var f = document.getElementById('echolox-frame');
+  function fit() {
+    f.style.height = (window.innerHeight - f.getBoundingClientRect().top) + 'px';
+  }
+  window.addEventListener('resize', fit);
+  // Run after layout; retry once to catch deferred nav rendering
+  setTimeout(fit, 0);
+  setTimeout(fit, 250);
+})();
+</script>
+<?php echo LBWeb::lbfooter(); ?>
