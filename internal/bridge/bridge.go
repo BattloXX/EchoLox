@@ -82,7 +82,12 @@ func Run(cfg *Config, cfgPath string, version string) error {
 	hueAPI := hue.NewAPI(mgr, loxClient, verifier, info)
 	hueAPI.Register(mux)
 
-	apiHandler := api.NewHandler(mgr, loxClient, verifier, lbs, cfgPath, cfg.DataDir, version)
+	// Wire the SSDP listener so the reset-hint endpoint can trigger a NOTIFY burst.
+	upnpListener := upnp.NewListener(info)
+	mgr.SetNotifyFn(upnpListener.TriggerNotify)
+
+	apiHandler := api.NewHandler(mgr, loxClient, verifier, lbs, cfgPath, cfg.DataDir, version,
+		hueAPI, upnpListener)
 	apiHandler.Register(mux)
 
 	webHandler := web.NewHandler(mgr, verifier, lbs, web.WebConfig{
@@ -94,9 +99,7 @@ func Run(cfg *Config, cfgPath string, version string) error {
 	migrateHandler := migrate.NewHandler(mgr)
 	migrateHandler.Register(mux)
 
-	go func() {
-		upnp.NewListener(info).Listen()
-	}()
+	go upnpListener.Listen()
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	logbuf.Global.Info("EchoLox HTTP server listening on %s", addr)

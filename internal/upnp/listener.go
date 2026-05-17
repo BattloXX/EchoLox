@@ -17,15 +17,29 @@ const (
 	apiVersion = "1.47.0"
 	modelID    = "BSB002"
 	uuidPrefix = "2f402f80-da50-11e1-9b23-"
+
+	// ntRoot / ntBasic are the three NT/ST types a real Hue bridge announces.
+	// Newer Alexa firmware expects all three.
+	ntRoot  = "upnp:rootdevice"
+	ntBasic = "urn:schemas-upnp-org:device:Basic:1"
 )
 
 // Listener listens for SSDP M-SEARCH packets and responds to Alexa discovery.
 type Listener struct {
-	info identity.BridgeInfo
+	info     identity.BridgeInfo
+	notifyCh chan struct{} // send to trigger an immediate NOTIFY burst
 }
 
 func NewListener(info identity.BridgeInfo) *Listener {
-	return &Listener{info: info}
+	return &Listener{info: info, notifyCh: make(chan struct{}, 1)}
+}
+
+// TriggerNotify requests an immediate SSDP NOTIFY burst (non-blocking).
+func (l *Listener) TriggerNotify() {
+	select {
+	case l.notifyCh <- struct{}{}:
+	default:
+	}
 }
 
 func (l *Listener) discoveryPort() int {
@@ -39,6 +53,10 @@ func (l *Listener) location() string {
 	return fmt.Sprintf("http://%s:%d/description.xml", l.info.IP, l.discoveryPort())
 }
 
+func (l *Listener) fullUUID() string {
+	return uuidPrefix + l.info.Suffix
+}
+
 func (l *Listener) Listen() {
 	conn, err := listenMulticast()
 	if err != nil {
@@ -49,15 +67,8 @@ func (l *Listener) Listen() {
 	conn.SetReadBuffer(65536)
 	logbuf.Global.Info("SSDP listener on %s  bridgeid=%s  LOCATION=%s", ssdpAddr, l.info.BridgeID, l.location())
 
-	// Send NOTIFY announcements on start and every 30 min
-	go func() {
-		time.Sleep(2 * time.Second)
-		l.sendNotify()
-		ticker := time.NewTicker(30 * time.Minute)
-		for range ticker.C {
-			l.sendNotify()
-		}
-	}()
+	// Startup burst + periodic announce every 5 min.
+	go l.notifyLoop()
 
 	buf := make([]byte, 4096)
 	for {
@@ -72,14 +83,45 @@ func (l *Listener) Listen() {
 		if l.isMSearch(msg) {
 			ua := extractHeader(msg, "user-agent")
 			discovery.RecordAlexa(src.IP.String(), ua)
-			logbuf.Global.Info("SSDP M-SEARCH from %s — responding (LOCATION: %s)", src, l.location())
-			go l.respond(src)
+			st := extractHeader(msg, "st")
+			logbuf.Global.Info("SSDP M-SEARCH from %s (ST: %s) — responding (LOCATION: %s)", src, st, l.location())
+			go l.respond(src, st)
 		}
 	}
 }
 
+// notifyLoop sends an initial 3-packet burst then repeats every 5 min (or on demand).
+func (l *Listener) notifyLoop() {
+	time.Sleep(2 * time.Second)
+	l.sendNotifyBurst()
+
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			l.sendNotifyBurst()
+		case <-l.notifyCh:
+			l.sendNotifyBurst()
+		}
+	}
+}
+
+// sendNotifyBurst sends the three SSDP NOTIFY variants that a real Hue bridge sends.
+func (l *Listener) sendNotifyBurst() {
+	nts := []string{
+		ntRoot,
+		"uuid:" + l.fullUUID(),
+		ntBasic,
+	}
+	for _, nt := range nts {
+		l.sendNotify(nt)
+		time.Sleep(time.Second)
+	}
+	logbuf.Global.Info("SSDP NOTIFY burst sent (3 variants, LOCATION: %s)", l.location())
+}
+
 // isMSearch returns true for any M-SEARCH with MAN: "ssdp:discover".
-// Responds to all such requests (Alexa uses Basic:1, but we accept ssdp:all too).
 func (l *Listener) isMSearch(msg string) bool {
 	if !strings.HasPrefix(msg, "M-SEARCH") {
 		return false
@@ -87,37 +129,52 @@ func (l *Listener) isMSearch(msg string) bool {
 	return strings.Contains(strings.ToLower(msg), "ssdp:discover")
 }
 
-// respond sends a unicast 200 OK via a dedicated ephemeral socket.
-func (l *Listener) respond(src *net.UDPAddr) {
+// respond sends a unicast 200 OK that mirrors the ST from the M-SEARCH request.
+func (l *Listener) respond(src *net.UDPAddr, st string) {
+	// Normalise: treat ssdp:all as Basic:1; fall back to Basic:1 for unknown types.
+	switch strings.ToLower(strings.TrimSpace(st)) {
+	case "ssdp:all", ntBasic, "":
+		l.sendResponse(src, ntBasic)
+	case ntRoot:
+		l.sendResponse(src, ntRoot)
+	default:
+		l.sendResponse(src, ntBasic)
+	}
+}
+
+func (l *Listener) sendResponse(src *net.UDPAddr, st string) {
 	conn, err := net.DialUDP("udp4", nil, src)
 	if err != nil {
 		logbuf.Global.Debug("SSDP unicast dial: %v", err)
 		return
 	}
 	defer conn.Close()
-	if _, err := conn.Write([]byte(l.buildResponse())); err != nil {
+	if _, err := conn.Write([]byte(l.buildResponse(st))); err != nil {
 		logbuf.Global.Debug("SSDP unicast write: %v", err)
 	} else {
-		logbuf.Global.Debug("SSDP 200 OK sent to %s", src)
+		logbuf.Global.Debug("SSDP 200 OK sent to %s (ST: %s)", src, st)
 	}
 }
 
-// buildResponse returns the SSDP 200 OK Alexa expects.
-func (l *Listener) buildResponse() string {
-	fullUUID := uuidPrefix + l.info.Suffix
+// buildResponse returns the SSDP 200 OK for the given ST.
+func (l *Listener) buildResponse(st string) string {
+	usn := "uuid:" + l.fullUUID() + "::" + st
+	if st == "uuid:"+l.fullUUID() {
+		usn = "uuid:" + l.fullUUID()
+	}
 	return "HTTP/1.1 200 OK\r\n" +
 		"CACHE-CONTROL: max-age=100\r\n" +
 		"EXT:\r\n" +
 		"LOCATION: " + l.location() + "\r\n" +
 		"SERVER: Linux/3.14.0 UPnP/1.0 IpBridge/" + apiVersion + "\r\n" +
-		"ST: urn:schemas-upnp-org:device:Basic:1\r\n" +
-		"USN: uuid:" + fullUUID + "::urn:schemas-upnp-org:device:Basic:1\r\n" +
+		"ST: " + st + "\r\n" +
+		"USN: " + usn + "\r\n" +
 		"hue-bridgeid: " + l.info.BridgeID + "\r\n" +
 		"\r\n"
 }
 
-// sendNotify broadcasts an SSDP NOTIFY so Alexa can find the bridge without M-SEARCH.
-func (l *Listener) sendNotify() {
+// sendNotify broadcasts a single SSDP NOTIFY for the given NT.
+func (l *Listener) sendNotify(nt string) {
 	ssdpUDPAddr, err := net.ResolveUDPAddr("udp4", ssdpAddr)
 	if err != nil {
 		return
@@ -128,21 +185,23 @@ func (l *Listener) sendNotify() {
 		return
 	}
 	defer conn.Close()
-	fullUUID := uuidPrefix + l.info.Suffix
+
+	usn := "uuid:" + l.fullUUID() + "::" + nt
+	if nt == "uuid:"+l.fullUUID() {
+		usn = "uuid:" + l.fullUUID()
+	}
 	notify := "NOTIFY * HTTP/1.1\r\n" +
 		"HOST: 239.255.255.250:1900\r\n" +
 		"CACHE-CONTROL: max-age=1800\r\n" +
 		"LOCATION: " + l.location() + "\r\n" +
-		"NT: urn:schemas-upnp-org:device:Basic:1\r\n" +
+		"NT: " + nt + "\r\n" +
 		"NTS: ssdp:alive\r\n" +
 		"SERVER: Linux/3.14.0 UPnP/1.0 IpBridge/" + apiVersion + "\r\n" +
-		"USN: uuid:" + fullUUID + "::urn:schemas-upnp-org:device:Basic:1\r\n" +
+		"USN: " + usn + "\r\n" +
 		"hue-bridgeid: " + l.info.BridgeID + "\r\n" +
 		"\r\n"
 	if _, err := conn.Write([]byte(notify)); err != nil {
-		logbuf.Global.Debug("SSDP NOTIFY write error: %v", err)
-	} else {
-		logbuf.Global.Info("SSDP NOTIFY sent (LOCATION: %s)", l.location())
+		logbuf.Global.Debug("SSDP NOTIFY write error (NT: %s): %v", nt, err)
 	}
 }
 
@@ -160,7 +219,6 @@ func RegisterDescription(mux *http.ServeMux, info identity.BridgeInfo) {
 }
 
 // buildDescriptionXML returns the UPnP description Alexa fetches after SSDP discovery.
-// URLBase uses discovery_port so Alexa routes subsequent API calls correctly.
 func buildDescriptionXML(info identity.BridgeInfo) string {
 	fullUUID := uuidPrefix + info.Suffix
 	dPort := info.DiscoveryPort

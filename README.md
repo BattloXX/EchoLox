@@ -605,6 +605,21 @@ iptables -A INPUT -p tcp --dport 80 -j ACCEPT
 
 ---
 
+### Alexa zeigt alte Geräte — keine neuen werden gefunden
+
+Dies ist das häufigste Problem nach einer Neueinrichtung. Ursache: Alexa cached Geräte
+dauerhaft nach `uniqueid`. Neue Geräte mit gleicher `uniqueid` wie bereits gecachte alte
+Geräte werden von Alexa ignoriert. Lösung (Reihenfolge wichtig):
+
+1. **`alexa.amazon.com`** (Desktop-Browser, _nicht_ mobile App) → Smart Home → Geräte → **„Alle vergessen"**
+2. **EchoLox → Discovery** öffnen → Button **„Alexa sauber neu verbinden"** klicken (sendet SSDP-Burst)
+3. **„Alexa, suche nach neuen Geräten"** sagen
+
+> Ab dieser Version sind alle `uniqueid`s stabil und an die interne Geräteid gebunden,
+> sodass dieses Problem nach dem einmaligen Reset nicht mehr auftreten kann.
+
+---
+
 ### Alexa erkennt Geräte, Befehle kommen nicht an
 
 1. **Testen-Button** in Geräteliste → sendet direkt an Miniserver

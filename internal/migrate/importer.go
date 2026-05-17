@@ -92,15 +92,31 @@ func ImportCLI(fromPath, toPath string) error {
 	}
 	store := device.NewStore(toPath)
 	existing, _ := store.Load()
+	existingNames := existingNormNames(existing)
 	for _, old := range oldDevices {
 		d, reason := MapDevice(old)
 		if d == nil {
 			log.Printf("skip %s: %s", old.Name, reason)
 			continue
 		}
+		norm := device.NormalizeName(d.Name)
+		if existingNames[norm] {
+			log.Printf("skip %s: device with normalized name %q already exists", old.Name, norm)
+			continue
+		}
+		existingNames[norm] = true
 		existing = append(existing, d)
 	}
 	return store.Save(existing)
+}
+
+// existingNormNames returns a set of normalized names for deduplication.
+func existingNormNames(devices []*device.Device) map[string]bool {
+	m := make(map[string]bool, len(devices))
+	for _, d := range devices {
+		m[device.NormalizeName(d.Name)] = true
+	}
+	return m
 }
 
 type Handler struct {
@@ -162,13 +178,27 @@ func (h *Handler) handleConfirm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
+	// Build existing name set for dedup before creating any device.
+	existingNames := make(map[string]bool)
+	for _, d := range h.mgr.All() {
+		existingNames[device.NormalizeName(d.Name)] = true
+	}
+	imported := 0
+	skipped := 0
 	for i := range devices {
+		norm := device.NormalizeName(devices[i].Name)
+		if existingNames[norm] {
+			skipped++
+			continue
+		}
+		existingNames[norm] = true
 		if err := h.mgr.Create(&devices[i]); err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
+		imported++
 	}
 	_ = filepath.Base(".")
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int{"imported": len(devices)})
+	json.NewEncoder(w).Encode(map[string]int{"imported": imported, "skipped": skipped})
 }

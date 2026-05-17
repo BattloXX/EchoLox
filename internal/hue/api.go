@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/BattloXX/EchoLox/internal/device"
@@ -19,6 +20,9 @@ type API struct {
 	lox      *loxone.Client
 	verifier *loxone.Verifier
 	info     identity.BridgeInfo
+	// factorynew signals to buildConfig() that the bridge should present itself
+	// as factory-new during the Alexa clean-rediscovery flow (reset-hint endpoint).
+	factorynew atomic.Bool
 }
 
 func NewAPI(mgr *device.Manager, lox *loxone.Client, verifier *loxone.Verifier, info identity.BridgeInfo) *API {
@@ -26,8 +30,22 @@ func NewAPI(mgr *device.Manager, lox *loxone.Client, verifier *loxone.Verifier, 
 }
 
 func (a *API) Register(mux *http.ServeMux) {
+	// Unauthenticated config — newer Alexa firmware probes this before pairing.
+	mux.HandleFunc("/api/config", a.serveConfigHTTP)
 	mux.HandleFunc("/api", a.handlePairing)
 	mux.HandleFunc("/api/", a.route)
+}
+
+// SetFactoryNew temporarily marks the bridge as factory-new.
+// Call with true before a rediscovery burst; the flag resets automatically after 120 s.
+func (a *API) SetFactoryNew(v bool) {
+	a.factorynew.Store(v)
+	if v {
+		go func() {
+			time.Sleep(120 * time.Second)
+			a.factorynew.Store(false)
+		}()
+	}
 }
 
 // handlePairing handles POST /api — Alexa pairs by posting {"devicetype":"..."}.
@@ -80,12 +98,20 @@ func (a *API) route(w http.ResponseWriter, r *http.Request) {
 	case "groups":
 		a.handleGroups(w, r, id)
 	case "config":
-		a.serveConfig(w)
+		a.serveConfigHTTP(w, r)
 	case "scenes", "schedules", "sensors", "rules", "resourcelinks":
 		writeJSON(w, map[string]interface{}{})
 	default:
 		writeJSON(w, map[string]interface{}{})
 	}
+}
+
+// serveConfigHTTP serves GET /api/config and GET /api/{user}/config.
+// The unauthenticated /api/config variant is probed by newer Alexa firmware
+// before pairing to validate the bridge.
+func (a *API) serveConfigHTTP(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	writeJSON(w, a.buildConfig())
 }
 
 // serveDatastore serves GET /api/{user} — Alexa fetches this during discovery.
@@ -103,12 +129,13 @@ func (a *API) serveDatastore(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (a *API) serveConfig(w http.ResponseWriter) {
-	writeJSON(w, a.buildConfig())
-}
-
 func (a *API) buildConfig() map[string]interface{} {
 	now := time.Now()
+	isFactoryNew := a.factorynew.Load()
+	dsVersion := "93"
+	if isFactoryNew {
+		dsVersion = "94"
+	}
 	return map[string]interface{}{
 		"name":             "EchoLox",
 		"zigbeechannel":    11,
@@ -124,7 +151,7 @@ func (a *API) buildConfig() map[string]interface{} {
 		"localtime":        now.Format("2006-01-02T15:04:05"),
 		"timezone":         "Europe/Vienna",
 		"modelid":          "BSB002",
-		"datastoreversion": "93",
+		"datastoreversion": dsVersion,
 		"swversion":        "01061424042",
 		"apiversion":       "1.47.0",
 		"linkbutton":       false,
@@ -136,7 +163,7 @@ func (a *API) buildConfig() map[string]interface{} {
 			"outgoing":      false,
 			"communication": "disconnected",
 		},
-		"factorynew":       false,
+		"factorynew":       isFactoryNew,
 		"replacesbridgeid": nil,
 		"backup": map[string]interface{}{
 			"status":    "idle",
@@ -300,7 +327,7 @@ func (a *API) buildGroupsMap(lights map[string]interface{}) map[string]interface
 // deviceToLight builds the full Hue light object for a device.
 func (a *API) deviceToLight(d *device.Device) map[string]interface{} {
 	s := a.mgr.GetState(d.ID)
-	lightType, modelid, productname := lightMeta(d.Type)
+	lightType, modelid, productname, productid, archetype := lightMeta(d.Type)
 
 	colormode := s.ColorMode
 	if colormode == "" && d.Type == device.TypeColor {
@@ -310,9 +337,10 @@ func (a *API) deviceToLight(d *device.Device) map[string]interface{} {
 	stateMap := map[string]interface{}{
 		"on":        s.On,
 		"bri":       s.Brightness,
-		"alert":     "none",
+		"alert":     "select",
 		"effect":    "none",
 		"reachable": true,
+		"mode":      "homeautomation",
 	}
 	if d.Type == device.TypeColor || d.Type == device.TypeDimmer {
 		stateMap["hue"] = s.Hue
@@ -322,29 +350,46 @@ func (a *API) deviceToLight(d *device.Device) map[string]interface{} {
 		stateMap["colormode"] = colormode
 	}
 
+	swUpdateTS := "2024-01-01T00:00:00"
 	return map[string]interface{}{
 		"state":            stateMap,
+		"swupdate":         map[string]interface{}{"state": "noupdates", "lastinstall": swUpdateTS},
 		"type":             lightType,
 		"name":             d.Name,
 		"modelid":          modelid,
 		"manufacturername": "Signify Netherlands B.V.",
 		"productname":      productname,
-		"uniqueid":         hueUniqueID(d.HueID),
-		"swversion":        "67.91.213",
+		"productid":        productid,
+		"uniqueid":         d.UniqueID,
+		"swversion":        "1.104.2",
+		"swconfigid":       "9B64A574",
 		"capabilities":     buildCapabilities(d.Type),
+		"config": map[string]interface{}{
+			"archetype":  archetype,
+			"function":   "functional",
+			"direction":  "omnidirectional",
+			"startup": map[string]interface{}{
+				"mode":       "safety",
+				"configured": true,
+			},
+		},
 	}
 }
 
-func lightMeta(t device.DeviceType) (lightType, modelid, productname string) {
+func lightMeta(t device.DeviceType) (lightType, modelid, productname, productid, archetype string) {
 	switch t {
 	case device.TypeColor:
-		return "Extended color light", "LCT015", "Hue color lamp"
+		return "Extended color light", "LCT015", "Hue color lamp",
+			"Philips-LCT015-1-GU10CEd5fd23+1f5b9d2f", "sultanbulb"
 	case device.TypeDimmer:
-		return "Dimmable light", "LWB006", "Hue White lamp"
+		return "Dimmable light", "LWB006", "Hue White lamp",
+			"Philips-LWB006-1-A19DLv4", "classicbulb"
 	case device.TypeScene, device.TypeSwitch:
-		return "On/Off plug-in unit", "LOM001", "Hue Smart plug"
+		return "On/Off plug-in unit", "LOM001", "Hue Smart plug",
+			"Philips-LOM001-1-SmartPlug", "plug"
 	default:
-		return "On/Off plug-in unit", "LOM001", "Hue Smart plug"
+		return "On/Off plug-in unit", "LOM001", "Hue Smart plug",
+			"Philips-LOM001-1-SmartPlug", "plug"
 	}
 }
 
@@ -371,14 +416,6 @@ func buildCapabilities(t device.DeviceType) map[string]interface{} {
 		cap["control"] = map[string]interface{}{}
 	}
 	return cap
-}
-
-// hueUniqueID returns a MAC-format uniqueid for a Hue light.
-// Format: 00:17:88:01:00:{id-bytes}-{id-byte}
-func hueUniqueID(hueID string) string {
-	n, _ := strconv.Atoi(hueID)
-	return fmt.Sprintf("00:17:88:01:00:%02x:%02x:%02x-%02x",
-		(n>>16)&0xFF, (n>>8)&0xFF, n&0xFF, n&0xFF)
 }
 
 func (a *API) send(deviceID, viName, value string) {

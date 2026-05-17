@@ -27,7 +27,12 @@ type Device struct {
 	ID string `json:"id"`
 	// HueID is the short numeric string exposed in the Hue API ("1", "2", ...).
 	// Alexa requires stable numeric-like IDs across restarts.
-	HueID         string                `json:"hue_id"`
+	HueID string `json:"hue_id"`
+	// UniqueID is the Hue MAC-format uniqueid (9 octets, "-" separator on last byte).
+	// Derived once from the stable Device.ID and persisted — never changes after creation,
+	// even if HueID is reassigned. Alexa keys its device cache by uniqueid; stability here
+	// prevents stale-cache collisions when devices are recreated with the same HueID counter.
+	UniqueID      string                `json:"unique_id,omitempty"`
 	Name          string                `json:"name"`
 	Type          DeviceType            `json:"type"`
 	SwitchMode    SwitchMode            `json:"switch_mode,omitempty"`

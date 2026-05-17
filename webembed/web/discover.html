@@ -56,6 +56,29 @@
   <div id="loxError" style="display:none" class="test-result error"></div>
   <div id="importResult" style="margin-top:12px"></div>
 
+  <!-- Alexa Sauber-Reset -->
+  <div style="margin-top:48px;padding:20px;border:2px solid #e65100;border-radius:8px;background:#fff3e0">
+    <h2 style="color:#e65100;margin-top:0">&#9888; Alexa zeigt alte / falsche Geräte?</h2>
+    <p style="margin:0 0 12px">
+      Alexa cached Geräte dauerhaft nach <code>uniqueid</code>. Wenn du Geräte gelöscht und neu angelegt hast,
+      erscheinen die neuen Geräte in Alexa erst, nachdem der Alexa-Cache einmalig geleert wurde.<br>
+      <strong>Folge diesen Schritten genau in dieser Reihenfolge:</strong>
+    </p>
+    <ol style="margin:0 0 16px;padding-left:20px;line-height:1.8">
+      <li>Öffne <strong><a href="https://alexa.amazon.com" target="_blank">alexa.amazon.com</a></strong>
+          in einem <em>Desktop-Browser</em> (nicht die mobile App — diese löscht unzuverlässig).</li>
+      <li>Navigiere zu <strong>Smart Home → Geräte</strong>, scrolle ganz nach unten →
+          klicke <strong>„Alle vergessen"</strong>.</li>
+      <li>Kehre hierher zurück und klicke den Button unten (sendet einen SSDP-NOTIFY-Burst
+          und signalisiert Alexa eine frische Bridge).</li>
+      <li>Sage anschließend: <strong>„Alexa, suche nach neuen Geräten"</strong>.</li>
+    </ol>
+    <button onclick="triggerAlexaReset()" class="btn btn-primary" id="resetBtn">
+      &#128260; Alexa sauber neu verbinden (SSDP-Burst senden)
+    </button>
+    <div id="resetResult" style="margin-top:10px"></div>
+  </div>
+
   <!-- Echo/Alexa Geräte -->
   <div class="header-row" style="margin-top:40px">
     <h2>Echo / Alexa Geräte</h2>

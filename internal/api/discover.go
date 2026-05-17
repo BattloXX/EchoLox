@@ -95,6 +95,12 @@ func (h *Handler) handleDiscoverLoxoneImport(w http.ResponseWriter, r *http.Requ
 		byBase[p.Base] = p
 	}
 
+	// Build existing name set to prevent re-importing already-present devices.
+	existingNames := make(map[string]bool)
+	for _, d := range h.mgr.All() {
+		existingNames[device.NormalizeName(d.Name)] = true
+	}
+
 	imported := []string{}
 	errors := map[string]string{}
 	for _, base := range req.Bases {
@@ -103,6 +109,12 @@ func (h *Handler) handleDiscoverLoxoneImport(w http.ResponseWriter, r *http.Requ
 			errors[base] = "nicht auf Miniserver gefunden"
 			continue
 		}
+		norm := device.NormalizeName(p.DisplayName)
+		if existingNames[norm] {
+			errors[base] = "Gerät mit diesem Namen existiert bereits"
+			continue
+		}
+		existingNames[norm] = true
 		d := &device.Device{
 			Name:       p.DisplayName,
 			Type:       device.DeviceType(p.Type),

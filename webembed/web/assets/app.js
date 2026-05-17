@@ -4,6 +4,32 @@ function toggleNav() {
   document.getElementById('navLinks').classList.toggle('open');
 }
 
+// ── Alexa Reset-Hint ───────────────────────────────────────────────────────────
+
+async function triggerAlexaReset() {
+  const btn = document.getElementById('resetBtn');
+  const resultEl = document.getElementById('resetResult');
+  btn.disabled = true;
+  btn.textContent = 'Wird gesendet…';
+  resultEl.innerHTML = '';
+  try {
+    const res = await fetch(`${API}/alexa/reset-hint`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      resultEl.innerHTML = `<span style="color:#2e7d32">&#10003; ${escapeHtml(data.message || 'SSDP-Burst gesendet.')}</span>`;
+      btn.textContent = '&#128260; Erneut senden';
+    } else {
+      resultEl.innerHTML = `<span style="color:#c00">Fehler: ${escapeHtml(data.error || 'Unbekannt')}</span>`;
+      btn.textContent = '&#128260; Alexa sauber neu verbinden (SSDP-Burst senden)';
+    }
+  } catch(e) {
+    resultEl.innerHTML = `<span style="color:#c00">Verbindungsfehler: ${escapeHtml(e.message)}</span>`;
+    btn.textContent = '&#128260; Alexa sauber neu verbinden (SSDP-Burst senden)';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // ── About ──────────────────────────────────────────────────────────────────
 
 async function loadAbout() {

@@ -22,18 +22,42 @@ import (
 	"github.com/BattloXX/EchoLox/internal/loxone"
 )
 
-type Handler struct {
-	mgr      *device.Manager
-	lox      *loxone.Client
-	verifier *loxone.Verifier
-	lbs      map[string]loxone.LBMiniserver
-	cfgPath  string
-	dataDir  string
-	version  string
+// alexaResetter can mark the emulated bridge as factory-new for a clean Alexa rediscovery.
+type alexaResetter interface {
+	SetFactoryNew(bool)
 }
 
-func NewHandler(mgr *device.Manager, lox *loxone.Client, verifier *loxone.Verifier, lbs map[string]loxone.LBMiniserver, cfgPath, dataDir, version string) *Handler {
-	return &Handler{mgr: mgr, lox: lox, verifier: verifier, lbs: lbs, cfgPath: cfgPath, dataDir: dataDir, version: version}
+// notifyTriggerer can request an immediate SSDP NOTIFY burst.
+type notifyTriggerer interface {
+	TriggerNotify()
+}
+
+type Handler struct {
+	mgr          *device.Manager
+	lox          *loxone.Client
+	verifier     *loxone.Verifier
+	lbs          map[string]loxone.LBMiniserver
+	cfgPath      string
+	dataDir      string
+	version      string
+	hueResetter  alexaResetter
+	ssdpNotifier notifyTriggerer
+}
+
+func NewHandler(mgr *device.Manager, lox *loxone.Client, verifier *loxone.Verifier,
+	lbs map[string]loxone.LBMiniserver, cfgPath, dataDir, version string,
+	hueResetter alexaResetter, ssdpNotifier notifyTriggerer) *Handler {
+	return &Handler{
+		mgr:          mgr,
+		lox:          lox,
+		verifier:     verifier,
+		lbs:          lbs,
+		cfgPath:      cfgPath,
+		dataDir:      dataDir,
+		version:      version,
+		hueResetter:  hueResetter,
+		ssdpNotifier: ssdpNotifier,
+	}
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -57,6 +81,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/echolox/api/discover/alexa", h.handleDiscoverAlexa)
 	mux.HandleFunc("/echolox/api/discover/loxone/import", h.handleDiscoverLoxoneImport)
 	mux.HandleFunc("/echolox/api/discover/loxone", h.handleDiscoverLoxone)
+	mux.HandleFunc("/echolox/api/alexa/reset-hint", h.handleAlexaResetHint)
 }
 
 func (h *Handler) handleVersion(w http.ResponseWriter, r *http.Request) {
@@ -781,4 +806,33 @@ func isValidUUID(s string) bool {
 	}
 	_, err := hex.DecodeString(s)
 	return err == nil
+}
+
+// ── Alexa Reset-Hint ───────────────────────────────────────────────────────────
+
+// handleAlexaResetHint POST /echolox/api/alexa/reset-hint
+// Triggers a fresh SSDP NOTIFY burst and temporarily marks the bridge as
+// factory-new so Alexa treats it as a new device after the user has cleared
+// the Alexa device list via alexa.amazon.com.
+func (h *Handler) handleAlexaResetHint(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	if h.hueResetter != nil {
+		h.hueResetter.SetFactoryNew(true)
+		logbuf.Global.Info("Alexa reset-hint: bridge marked factory-new for 120 s")
+	}
+	if h.ssdpNotifier != nil {
+		h.ssdpNotifier.TriggerNotify()
+		logbuf.Global.Info("Alexa reset-hint: SSDP NOTIFY burst triggered")
+	}
+	writeJSON(w, map[string]string{
+		"status":  "ok",
+		"message": "SSDP NOTIFY burst gesendet. Bitte jetzt in der Alexa-App 'Geräte suchen' auslösen.",
+	})
 }
