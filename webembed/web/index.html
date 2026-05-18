@@ -26,8 +26,20 @@
     <h1>Geräte</h1>
     <a href="device.html" class="btn btn-primary">+ Neu</a>
   </div>
+  <div class="filter-row">
+    <input type="text" id="deviceSearch" placeholder="Suche nach Name, Typ, Transport, Virtual Input…" oninput="renderDevices()" style="margin-left:0;flex:1;max-width:400px">
+  </div>
   <table id="deviceTable">
-    <thead><tr><th>Name</th><th>Typ</th><th>Modus</th><th>Transport</th><th>Virtual Inputs</th><th>Aktionen</th></tr></thead>
+    <thead>
+      <tr>
+        <th class="sortable" id="dth-name" onclick="sortDevices('name')">Name <span class="sort-icon" id="dsort-name"></span></th>
+        <th class="sortable" id="dth-type" onclick="sortDevices('type')">Typ <span class="sort-icon" id="dsort-type"></span></th>
+        <th class="sortable" id="dth-mode" onclick="sortDevices('switch_mode')">Modus <span class="sort-icon" id="dsort-mode"></span></th>
+        <th class="sortable" id="dth-transport" onclick="sortDevices('transport')">Transport <span class="sort-icon" id="dsort-transport"></span></th>
+        <th>Virtual Inputs</th>
+        <th>Aktionen</th>
+      </tr>
+    </thead>
     <tbody id="deviceBody"></tbody>
   </table>
 </div>

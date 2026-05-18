@@ -34,7 +34,15 @@
     <input type="text" id="searchInput" placeholder="Suche..." oninput="filterStatus(currentFilter)">
   </div>
   <table>
-    <thead><tr><th>Status</th><th>Virtual Input Name</th><th>Gerät</th><th>Letzter Wert</th><th>Zuletzt gesendet</th></tr></thead>
+    <thead>
+      <tr>
+        <th class="sortable" id="sth-status" onclick="sortStatusBy('status')">Status <span class="sort-icon" id="ssort-status"></span></th>
+        <th class="sortable" id="sth-name" onclick="sortStatusBy('name')">Virtual Input Name <span class="sort-icon" id="ssort-name"></span></th>
+        <th class="sortable" id="sth-device" onclick="sortStatusBy('device_name')">Gerät <span class="sort-icon" id="ssort-device"></span></th>
+        <th class="sortable" id="sth-value" onclick="sortStatusBy('last_value')">Letzter Wert <span class="sort-icon" id="ssort-value"></span></th>
+        <th class="sortable" id="sth-sent" onclick="sortStatusBy('last_sent')">Zuletzt gesendet <span class="sort-icon" id="ssort-sent"></span></th>
+      </tr>
+    </thead>
     <tbody id="statusBody"></tbody>
   </table>
 </div>

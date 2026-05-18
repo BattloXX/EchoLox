@@ -60,13 +60,55 @@ async function loadAbout() {
 
 // ── Devices ────────────────────────────────────────────────────────────────
 
+let allDevices = [];
+let deviceSort = { col: null, dir: 1 };
+
 async function loadDevices() {
   const res = await fetch(`${API}/devices`);
-  const devices = await res.json();
+  allDevices = await res.json() || [];
+  renderDevices();
+}
+
+function sortDevices(col) {
+  deviceSort.dir = deviceSort.col === col ? deviceSort.dir * -1 : 1;
+  deviceSort.col = col;
+  renderDevices();
+}
+
+function renderDevices() {
+  const search = (document.getElementById('deviceSearch')?.value || '').toLowerCase();
   const tbody = document.getElementById('deviceBody');
   if (!tbody) return;
   tbody.innerHTML = '';
-  (devices || []).forEach(d => {
+
+  const colToIcon = { name: 'dsort-name', type: 'dsort-type', switch_mode: 'dsort-mode', transport: 'dsort-transport' };
+  const colToTh = { name: 'dth-name', type: 'dth-type', switch_mode: 'dth-mode', transport: 'dth-transport' };
+  Object.entries(colToIcon).forEach(([col, id]) => {
+    const icon = document.getElementById(id);
+    const th = document.getElementById(colToTh[col]);
+    const active = deviceSort.col === col;
+    if (icon) icon.textContent = active ? (deviceSort.dir === 1 ? '▲' : '▼') : '';
+    if (th) th.classList.toggle('sorted', active);
+  });
+
+  let filtered = allDevices.filter(d => {
+    if (!search) return true;
+    const vis = Object.values(d.virtual_inputs || {}).join(' ').toLowerCase();
+    return d.name.toLowerCase().includes(search)
+      || (d.type || '').toLowerCase().includes(search)
+      || (d.transport || 'http').toLowerCase().includes(search)
+      || vis.includes(search);
+  });
+
+  if (deviceSort.col) {
+    filtered = filtered.slice().sort((a, b) => {
+      const av = (a[deviceSort.col] || '').toString().toLowerCase();
+      const bv = (b[deviceSort.col] || '').toString().toLowerCase();
+      return av.localeCompare(bv, 'de') * deviceSort.dir;
+    });
+  }
+
+  filtered.forEach(d => {
     const vis = Object.entries(d.virtual_inputs || {})
       .map(([k,v]) => `<span style="font-family:monospace;font-size:0.85em">${v}</span>`)
       .join('<br>');
@@ -266,6 +308,13 @@ function generateVIs(name, type, switchMode) {
 
 let allRows = [];
 let currentFilter = 'all';
+let statusSort = { col: null, dir: 1 };
+
+function sortStatusBy(col) {
+  statusSort.dir = statusSort.col === col ? statusSort.dir * -1 : 1;
+  statusSort.col = col;
+  renderStatus();
+}
 
 async function loadStatus() {
   const res = await fetch(`${API}/status`);
@@ -292,19 +341,39 @@ function renderStatus() {
   if (!tbody) return;
   const icons = { ok: '✅', not_found: '🟠', access_denied: '🔴', not_sent: '⬜' };
   tbody.innerHTML = '';
-  (allRows || [])
+
+  const colToIcon = { status: 'ssort-status', name: 'ssort-name', device_name: 'ssort-device', last_value: 'ssort-value', last_sent: 'ssort-sent' };
+  const colToTh = { status: 'sth-status', name: 'sth-name', device_name: 'sth-device', last_value: 'sth-value', last_sent: 'sth-sent' };
+  Object.entries(colToIcon).forEach(([col, id]) => {
+    const icon = document.getElementById(id);
+    const th = document.getElementById(colToTh[col]);
+    const active = statusSort.col === col;
+    if (icon) icon.textContent = active ? (statusSort.dir === 1 ? '▲' : '▼') : '';
+    if (th) th.classList.toggle('sorted', active);
+  });
+
+  let rows = (allRows || [])
     .filter(r => currentFilter === 'all' || r.status === currentFilter)
-    .filter(r => !search || r.name.toLowerCase().includes(search) || r.device_name.toLowerCase().includes(search))
-    .forEach(r => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><span class="status-${r.status}">${icons[r.status] || '?'} ${r.status}</span></td>
-        <td style="font-family:monospace">${r.name}</td>
-        <td>${r.device_name}</td>
-        <td>${r.last_value || '—'}</td>
-        <td>${r.last_sent || 'nie'}</td>`;
-      tbody.appendChild(tr);
+    .filter(r => !search || r.name.toLowerCase().includes(search) || r.device_name.toLowerCase().includes(search));
+
+  if (statusSort.col) {
+    rows = rows.slice().sort((a, b) => {
+      const av = (a[statusSort.col] || '').toString().toLowerCase();
+      const bv = (b[statusSort.col] || '').toString().toLowerCase();
+      return av.localeCompare(bv, 'de') * statusSort.dir;
     });
+  }
+
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="status-${r.status}">${icons[r.status] || '?'} ${r.status}</span></td>
+      <td style="font-family:monospace">${r.name}</td>
+      <td>${r.device_name}</td>
+      <td>${r.last_value || '—'}</td>
+      <td>${r.last_sent || 'nie'}</td>`;
+    tbody.appendChild(tr);
+  });
 }
 
 // ── Settings ───────────────────────────────────────────────────────────────
