@@ -702,7 +702,31 @@ Die Bridge-UUID wird aus der LoxBerry-IP berechnet und bleibt stabil. Falls nöt
 
 ## Sicherheit
 
-EchoLox ist für den Betrieb im **lokalen Netzwerk** ausgelegt. Kein HTTPS, keine Authentifizierung an der Hue-API (wie die echte Bridge). Nicht aus dem Internet erreichbar machen.
+> **Wichtig:** EchoLox ist ausschließlich für den Betrieb im **lokalen Netzwerk** ausgelegt.
+
+- Kein HTTPS — die Hue-Bridge-API ist von Alexa aus unverschlüsselt erreichbar (genauso wie eine echte Philips Hue Bridge im LAN).
+- Keine Authentifizierung an der Hue-API — jeder im lokalen Netz kann Befehle senden.
+- **EchoLox niemals direkt aus dem Internet erreichbar machen.** Kein Port-Forwarding, kein direktes Exposure auf Port 80.
+- Die Loxone-Verbindung (HTTP/WebSocket) läuft ebenfalls nur im LAN und nutzt die konfigurierten Miniserver-Zugangsdaten.
+
+---
+
+## Rechtliche Hinweise
+
+**EchoLox ist kein Produkt von Loxone und wird von Loxone nicht unterstützt, empfohlen oder anderweitig befürwortet.** Loxone® ist eine eingetragene Marke der Loxone Electronics GmbH.
+
+EchoLox ist ein unabhängiges Open-Source-Projekt und steht in keiner Verbindung zu den folgenden Unternehmen oder deren Produkten:
+
+| Marke | Inhaber |
+|---|---|
+| Philips®, Philips Hue® | Koninklijke Philips N.V. / Signify Netherlands B.V. |
+| Alexa®, Amazon® | Amazon.com, Inc. |
+| Loxone® | Loxone Electronics GmbH |
+| LoxBerry® | loxberry.de (Loxberry Community Project) |
+
+Die Verwendung dieser Markennamen dient ausschließlich der Beschreibung der Kompatibilität und stellt keine Behauptung einer Verbindung, Partnerschaft oder Billigung durch die jeweiligen Markeninhaber dar.
+
+**Lizenz:** EchoLox steht unter der [MIT-Lizenz](LICENSE). Die Software wird ohne jegliche Garantie bereitgestellt — siehe Lizenzdatei für den vollständigen Haftungsausschluss.
 
 ---
 
