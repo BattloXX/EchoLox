@@ -2,6 +2,7 @@ package device
 
 import (
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +14,10 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// ErrDuplicateName is returned by Create and Update when a device with the same
+// normalized name already exists.
+var ErrDuplicateName = errors.New("duplicate device name")
 
 var reUniqueID = regexp.MustCompile(`^00:17:88(:[0-9a-f]{2}){5}-[0-9a-f]{2}$`)
 
@@ -273,6 +278,9 @@ func (m *Manager) Create(d *Device) error {
 	if d.ID == "" {
 		d.ID = uuid.New().String()[:18]
 	}
+	if m.nameInUse(NormalizeName(d.Name), "") {
+		return fmt.Errorf("%w: Ein Gerät mit dem Namen %q existiert bereits", ErrDuplicateName, d.Name)
+	}
 	if d.HueID == "" {
 		d.HueID = strconv.Itoa(m.nextHue)
 		m.nextHue++
@@ -311,9 +319,23 @@ func (m *Manager) uniqueIDInUse(uid string) bool {
 	return false
 }
 
+// nameInUse returns true if any device (other than excludeID) has the same
+// normalized name. Caller must hold m.mu.
+func (m *Manager) nameInUse(norm, excludeID string) bool {
+	for id, d := range m.byID {
+		if id != excludeID && NormalizeName(d.Name) == norm {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *Manager) Update(d *Device) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.nameInUse(NormalizeName(d.Name), d.ID) {
+		return fmt.Errorf("%w: Ein Gerät mit dem Namen %q existiert bereits", ErrDuplicateName, d.Name)
+	}
 	if old, ok := m.byID[d.ID]; ok {
 		if d.HueID == "" {
 			d.HueID = old.HueID

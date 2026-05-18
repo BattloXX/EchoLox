@@ -175,11 +175,27 @@ function initDeviceForm() {
       transport: transportEl.value,
       switch_mode: switchModeEl ? switchModeEl.value : 'onoff',
     };
-    if (id) {
-      body.id = id;
-      await fetch(`${API}/devices/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    } else {
-      await fetch(`${API}/devices`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    let res;
+    try {
+      if (id) {
+        body.id = id;
+        res = await fetch(`${API}/devices/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      } else {
+        res = await fetch(`${API}/devices`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      }
+    } catch (err) {
+      const result = document.getElementById('msTestResult');
+      result.className = 'test-result error';
+      result.textContent = '✗ ' + err.message;
+      return;
+    }
+    if (!res.ok) {
+      const result = document.getElementById('msTestResult');
+      result.className = 'test-result error';
+      let msg = 'Fehler beim Speichern';
+      try { const data = await res.json(); msg = data.error || msg; } catch (_) {}
+      result.textContent = '✗ ' + msg;
+      return;
     }
     window.location.href = 'index.html';
   });
