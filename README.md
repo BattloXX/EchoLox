@@ -438,7 +438,6 @@ Pfad: `/opt/loxberry/data/plugins/EchoLox/EchoLox.cfg`
 ```yaml
 server:
   port: 80             # Port auf dem EchoLox lauscht (direkt, kein Proxy)
-  discovery_port: 0    # In SSDP beworbener Port (0 = wie port); nur bei Reverse-Proxy setzen
   ip: ""               # leer = automatisch erkannt
 
 upnp:

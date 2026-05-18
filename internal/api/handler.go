@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -102,7 +103,11 @@ func (h *Handler) handleDevices(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := h.mgr.Create(&d); err != nil {
-			http.Error(w, err.Error(), 500)
+			if errors.Is(err, device.ErrDuplicateName) {
+				writeErr(w, 409, err)
+			} else {
+				writeErr(w, 500, err)
+			}
 			return
 		}
 		writeJSON(w, d)
@@ -138,7 +143,11 @@ func (h *Handler) handleDevice(w http.ResponseWriter, r *http.Request) {
 		}
 		d.ID = id
 		if err := h.mgr.Update(d); err != nil {
-			http.Error(w, err.Error(), 500)
+			if errors.Is(err, device.ErrDuplicateName) {
+				writeErr(w, 409, err)
+			} else {
+				writeErr(w, 500, err)
+			}
 			return
 		}
 		writeJSON(w, d)

@@ -44,9 +44,7 @@ func FetchVIProposals(c *Client) ([]VIProposal, error) {
 	}
 
 	var app struct {
-		Controls map[string]struct {
-			Name string `json:"name"`
-		} `json:"controls"`
+		Controls map[string]loxControl `json:"controls"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&app); err != nil {
 		return nil, fmt.Errorf("LoxAPP3.json parsen: %w", err)
@@ -54,13 +52,21 @@ func FetchVIProposals(c *Client) ([]VIProposal, error) {
 
 	var echoloxVIs []string
 	for _, ctrl := range app.Controls {
-		if strings.HasPrefix(ctrl.Name, "echolox_") {
-			echoloxVIs = append(echoloxVIs, ctrl.Name)
-		}
+		collectEcholoxVIs(ctrl, &echoloxVIs)
 	}
 	sort.Strings(echoloxVIs)
 
 	return groupEcholoxVIs(echoloxVIs), nil
+}
+
+// collectEcholoxVIs appends all echolox_* names found in ctrl and its subControls.
+func collectEcholoxVIs(ctrl loxControl, out *[]string) {
+	if strings.HasPrefix(ctrl.Name, "echolox_") {
+		*out = append(*out, ctrl.Name)
+	}
+	for _, sub := range ctrl.SubControls {
+		collectEcholoxVIs(sub, out)
+	}
 }
 
 // knownSuffixes are unambiguous — no need to check for a complementary VI.

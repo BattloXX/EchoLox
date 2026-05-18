@@ -185,15 +185,7 @@ for SIZE in 64 128 256 512; do
 done
 [ "$ICONS_OK" -gt 0 ] && echo "<OK> EchoLox icons installed ($ICONS_OK sizes)"
 
-# ── 10. Plugin admin redirect ─────────────────────────────────────────────────
-PLUGINWEBDIR="$LBHOMEDIR/webfrontend/htmlauth/plugins/EchoLox"
-mkdir -p "$PLUGINWEBDIR"
-cat > "$PLUGINWEBDIR/index.php" << 'PHPEOF'
-<?php header("Location: /echoloxui/"); exit;
-PHPEOF
-echo "<OK> EchoLox plugin admin page created"
-
-# ── 11. sudoers: allow loxberry to restart the service ───────────────────────
+# ── 10. sudoers: allow loxberry to restart the service ───────────────────────
 SUDOERS_FILE="/etc/sudoers.d/echolox-restart"
 cat > "$SUDOERS_FILE" << 'SUDOEOF'
 loxberry ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart echolox.service

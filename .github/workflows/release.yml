@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths-ignore:
       - 'release.cfg'
+      - 'prerelease.cfg'
   workflow_dispatch:
     inputs:
       prerelease:
@@ -73,7 +74,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update release.cfg for LoxBerry autoupdate
+      - name: Update release.cfg and prerelease.cfg for LoxBerry autoupdate
         if: steps.check.outputs.exists == 'false'
         run: |
           V="${{ steps.ver.outputs.version }}"
@@ -84,9 +85,12 @@ jobs:
             echo "ARCHIVEURL = https://github.com/$REPO/releases/download/v$V/EchoLox-$V.zip"
             echo "INFOURL = https://github.com/$REPO/releases/tag/v$V"
           } > release.cfg
+          if [ "${{ inputs.prerelease || 'false' }}" = "true" ]; then
+            cp release.cfg prerelease.cfg
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add release.cfg
+          git add release.cfg prerelease.cfg
           git diff --staged --quiet || git commit -m "chore: update release.cfg to v$V [skip ci]"
           git push
         env:
