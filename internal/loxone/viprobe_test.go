@@ -41,6 +41,43 @@ func TestFetchVIProposals_LowercasePrefix(t *testing.T) {
 	}
 }
 
+func TestFetchVIProposals_PlainNames(t *testing.T) {
+	// VIs without any echolox_ prefix — should be found by type.
+	body := buildLoxAPP3(map[string]loxControl{
+		"u1": {Name: "Licht_on", Type: "VirtualInput"},
+		"u2": {Name: "Licht_off", Type: "VirtualInput"},
+		"u3": {Name: "Jalousie", Type: "VirtualInput"},
+	})
+	c, _ := testClient(t, body)
+	props, err := FetchVIProposals(c)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(props) != 2 {
+		t.Fatalf("expected 2 proposals (Licht pair + Jalousie), got %d: %+v", len(props), props)
+	}
+}
+
+func TestFetchVIProposals_NonVITypeIgnored(t *testing.T) {
+	// Controls that are not VirtualInput type must NOT be included.
+	body := buildLoxAPP3(map[string]loxControl{
+		"u1": {Name: "Licht_on", Type: "Switch"},
+		"u2": {Name: "Licht_off", Type: "Jalousie"},
+		"u3": {Name: "Real_VI", Type: "VirtualInput"},
+	})
+	c, _ := testClient(t, body)
+	props, err := FetchVIProposals(c)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(props) != 1 {
+		t.Fatalf("expected 1 proposal (only VirtualInput), got %d: %+v", len(props), props)
+	}
+	if props[0].Base != "Real_VI" {
+		t.Errorf("expected base Real_VI, got %q", props[0].Base)
+	}
+}
+
 func TestFetchVIProposals_MixedCasePrefix(t *testing.T) {
 	// VIs named with capital E — must still be found and grouped.
 	body := buildLoxAPP3(map[string]loxControl{

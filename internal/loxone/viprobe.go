@@ -99,27 +99,54 @@ func FetchVIProposals(c *Client) ([]VIProposal, error) {
 	}
 	log.Printf("viprobe: parsed %d top-level controls", len(controls))
 
-	var echoloxVIs []string
+	typeCounts := make(map[string]int)
 	for _, ctrl := range controls {
-		collectEcholoxVIs(ctrl, &echoloxVIs)
+		countControlTypes(ctrl, typeCounts)
 	}
-	sort.Strings(echoloxVIs)
-	log.Printf("viprobe: found %d echolox_* VIs: %v", len(echoloxVIs), echoloxVIs)
+	log.Printf("viprobe: control types: %v", typeCounts)
 
-	proposals := groupEcholoxVIs(echoloxVIs)
+	var allVIs []string
+	for _, ctrl := range controls {
+		collectVIs(ctrl, &allVIs)
+	}
+	sort.Strings(allVIs)
+	log.Printf("viprobe: found %d VirtualInput VIs: %v", len(allVIs), allVIs)
+
+	proposals := groupVIs(allVIs)
 	log.Printf("viprobe: grouped into %d proposals", len(proposals))
 	return proposals, nil
 }
 
-// collectEcholoxVIs appends all echolox_* names found in ctrl and its subControls.
-// The prefix check is case-insensitive so that VIs named "EchoLox_*" or
-// "ECHOLOX_*" are found as well; the original name is preserved for HTTP commands.
-func collectEcholoxVIs(ctrl loxControl, out *[]string) {
-	if strings.HasPrefix(strings.ToLower(ctrl.Name), "echolox_") {
-		*out = append(*out, ctrl.Name)
+// collectVIs appends all VirtualInput and VirtualInputText leaf controls.
+// A "leaf" is a VI that has no sub-controls of VI type — parent container
+// blocks are skipped because only the leaf nodes are directly HTTP-triggerable.
+func collectVIs(ctrl loxControl, out *[]string) {
+	t := strings.ToLower(ctrl.Type)
+	if (t == "virtualinput" || t == "virtualinputtext") && ctrl.Name != "" {
+		hasVISub := false
+		for _, sub := range ctrl.SubControls {
+			st := strings.ToLower(sub.Type)
+			if st == "virtualinput" || st == "virtualinputtext" {
+				hasVISub = true
+				break
+			}
+		}
+		if !hasVISub {
+			*out = append(*out, ctrl.Name)
+		}
 	}
 	for _, sub := range ctrl.SubControls {
-		collectEcholoxVIs(sub, out)
+		collectVIs(sub, out)
+	}
+}
+
+// countControlTypes counts all control types recursively for debug logging.
+func countControlTypes(ctrl loxControl, counts map[string]int) {
+	if ctrl.Type != "" {
+		counts[ctrl.Type]++
+	}
+	for _, sub := range ctrl.SubControls {
+		countControlTypes(sub, counts)
 	}
 }
 
@@ -151,7 +178,7 @@ func viBase(vi string, viSet map[string]bool) string {
 	return vi
 }
 
-func groupEcholoxVIs(vis []string) []VIProposal {
+func groupVIs(vis []string) []VIProposal {
 	viSet := make(map[string]bool, len(vis))
 	for _, v := range vis {
 		viSet[v] = true
@@ -207,12 +234,12 @@ func groupEcholoxVIs(vis []string) []VIProposal {
 }
 
 func viBaseToDisplayName(base string) string {
-	// Strip the echolox_ prefix case-insensitively so "EchoLox_Licht" and
-	// "echolox_licht" both produce the same display name.
 	name := base
+	// Strip optional echolox_ prefix (backward compat for users with that convention).
 	if len(base) >= 8 && strings.ToLower(base[:8]) == "echolox_" {
 		name = base[8:]
 	}
+	// Replace underscores with spaces and title-case each word.
 	words := strings.Split(name, "_")
 	for i, w := range words {
 		if len(w) > 0 {
