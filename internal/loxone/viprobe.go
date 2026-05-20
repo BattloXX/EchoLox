@@ -43,15 +43,43 @@ func FetchVIProposals(c *Client) ([]VIProposal, error) {
 		return nil, fmt.Errorf("Miniserver antwortete mit HTTP %d", resp.StatusCode)
 	}
 
-	var app struct {
-		Controls map[string]loxControl `json:"controls"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&app); err != nil {
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return nil, fmt.Errorf("LoxAPP3.json parsen: %w", err)
+	}
+	// Detect Loxone LL error wrapper — firmware returns HTTP 200 with
+	// {"LL":{"Code":"401","value":"..."}} instead of a real HTTP 401.
+	if llData, ok := raw["LL"]; ok {
+		var ll struct {
+			Code  string `json:"Code"`
+			Value string `json:"value"`
+		}
+		if json.Unmarshal(llData, &ll) == nil && ll.Code != "" && ll.Code != "200" {
+			return nil, fmt.Errorf("Miniserver-Fehler (Code %s) — Zugangsdaten prüfen: %s", ll.Code, ll.Value)
+		}
+	}
+	// Find the controls key case-insensitively ("Controls" in real firmware).
+	var controlsJSON json.RawMessage
+	for k, v := range raw {
+		if strings.EqualFold(k, "controls") {
+			controlsJSON = v
+			break
+		}
+	}
+	if controlsJSON == nil {
+		keys := make([]string, 0, len(raw))
+		for k := range raw {
+			keys = append(keys, k)
+		}
+		return nil, fmt.Errorf("LoxAPP3.json enthält kein 'Controls'-Feld (vorhandene Schlüssel: %v)", keys)
+	}
+	var controls map[string]loxControl
+	if err := json.Unmarshal(controlsJSON, &controls); err != nil {
+		return nil, fmt.Errorf("LoxAPP3.json Controls parsen: %w", err)
 	}
 
 	var echoloxVIs []string
-	for _, ctrl := range app.Controls {
+	for _, ctrl := range controls {
 		collectEcholoxVIs(ctrl, &echoloxVIs)
 	}
 	sort.Strings(echoloxVIs)

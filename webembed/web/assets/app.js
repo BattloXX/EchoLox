@@ -888,8 +888,11 @@ function renderLoxProposals(proposals) {
       : '<span style="color:#2e7d32;font-size:0.85em;font-weight:bold">neu</span>';
     const tr = document.createElement('tr');
     if (p.already_exists) tr.style.opacity = '0.55';
+    const checkCell = p.already_exists
+      ? '<td></td>'
+      : `<td><input type="checkbox" class="lox-check" value="${p.base}" checked></td>`;
     tr.innerHTML = `
-      <td><input type="checkbox" class="lox-check" value="${p.base}" ${p.already_exists ? '' : 'checked'}></td>
+      ${checkCell}
       <td>${p.display_name}</td>
       <td><span class="type-badge">${p.type}</span></td>
       <td>${p.type !== 'scene' ? modeLabel : '—'}</td>

@@ -1,6 +1,7 @@
 package loxone
 
 import (
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -86,6 +87,42 @@ func TestFetchVIProposals_NestedSubControl(t *testing.T) {
 	}
 	if len(props) != 1 {
 		t.Fatalf("expected 1 proposal from nested subcontrols, got %d", len(props))
+	}
+}
+
+func TestFetchVIProposals_LLErrorWrapper(t *testing.T) {
+	// Loxone returns HTTP 200 with {"LL":{"Code":"401","value":"..."}} on auth failure.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/data/LoxAPP3.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"LL":{"Code":"401","value":"unauthorized"}}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	host, port, _ := net.SplitHostPort(srv.Listener.Addr().String())
+	ms := &LBMiniserver{IPAddress: host, Port: port, Admin: "user", Pass: "pass"}
+	c := NewClient(ms, "http", 7777)
+	_, err := FetchVIProposals(c)
+	if err == nil {
+		t.Fatal("expected error for LL error wrapper, got nil")
+	}
+}
+
+func TestFetchVIProposals_PascalCaseControls(t *testing.T) {
+	// Real Loxone firmware uses "Controls" (PascalCase), not "controls".
+	body, _ := json.Marshal(map[string]interface{}{
+		"Controls": map[string]loxControl{
+			"u1": {Name: "echolox_jalousie_on", Type: "VirtualInput"},
+			"u2": {Name: "echolox_jalousie_off", Type: "VirtualInput"},
+		},
+	})
+	c, _ := testClient(t, body)
+	props, err := FetchVIProposals(c)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(props) != 1 {
+		t.Fatalf("expected 1 proposal for PascalCase Controls key, got %d", len(props))
 	}
 }
 

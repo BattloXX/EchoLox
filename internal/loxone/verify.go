@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -74,17 +75,35 @@ func (v *Verifier) RefreshCache() error {
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
-	var app struct {
-		MSInfo struct {
-			SerialNr string `json:"serialNr"`
-		} `json:"msInfo"`
-		Controls map[string]loxControl `json:"controls"`
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return err
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&app); err != nil {
+	// Detect Loxone LL error wrapper (HTTP 200 with {"LL":{"Code":"401",...}}).
+	if llData, ok := raw["LL"]; ok {
+		var ll struct {
+			Code string `json:"Code"`
+		}
+		if json.Unmarshal(llData, &ll) == nil && ll.Code != "" && ll.Code != "200" {
+			return fmt.Errorf("access denied")
+		}
+	}
+	var controlsJSON json.RawMessage
+	for k, val := range raw {
+		if strings.EqualFold(k, "controls") {
+			controlsJSON = val
+			break
+		}
+	}
+	if controlsJSON == nil {
+		return fmt.Errorf("LoxAPP3.json: no controls field")
+	}
+	var controls map[string]loxControl
+	if err := json.Unmarshal(controlsJSON, &controls); err != nil {
 		return err
 	}
 	cache := make(map[string]bool)
-	for _, ctrl := range app.Controls {
+	for _, ctrl := range controls {
 		indexControl(ctrl, cache)
 	}
 	v.mu.Lock()
