@@ -59,10 +59,10 @@ func TestFetchVIProposals_PlainNames(t *testing.T) {
 }
 
 func TestFetchVIProposals_NonVITypeIgnored(t *testing.T) {
-	// Controls that are not VirtualInput type must NOT be included.
+	// Jalousie type must NOT be included; VirtualInput and Switch both should be.
 	body := buildLoxAPP3(map[string]loxControl{
 		"u1": {Name: "Licht_on", Type: "Switch"},
-		"u2": {Name: "Licht_off", Type: "Jalousie"},
+		"u2": {Name: "Gartentor", Type: "Jalousie"}, // ignored
 		"u3": {Name: "Real_VI", Type: "VirtualInput"},
 	})
 	c, _ := testClient(t, body)
@@ -70,11 +70,40 @@ func TestFetchVIProposals_NonVITypeIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(props) != 1 {
-		t.Fatalf("expected 1 proposal (only VirtualInput), got %d: %+v", len(props), props)
+	// Real_VI from VirtualInput + Licht_on from Switch direct control
+	if len(props) != 2 {
+		t.Fatalf("expected 2 proposals (VirtualInput + Switch), got %d: %+v", len(props), props)
 	}
-	if props[0].Base != "Real_VI" {
-		t.Errorf("expected base Real_VI, got %q", props[0].Base)
+}
+
+func TestFetchVIProposals_DirectControl(t *testing.T) {
+	// Direct controls (Dimmer, Switch) found by type, no VirtualInput needed.
+	body := buildLoxAPP3(map[string]loxControl{
+		"d1": {Name: "Wohnzimmer Licht", Type: "Dimmer"},
+		"d2": {Name: "Gartenbeleuchtung", Type: "Switch"},
+		"d3": {Name: "Jalousie Bad", Type: "Jalousie"}, // ignored
+	})
+	c, _ := testClient(t, body)
+	props, err := FetchVIProposals(c)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(props) != 2 {
+		t.Fatalf("expected 2 proposals (Dimmer + Switch), got %d: %+v", len(props), props)
+	}
+	byBase := make(map[string]VIProposal, 2)
+	for _, p := range props {
+		byBase[p.Base] = p
+	}
+	if p, ok := byBase["Wohnzimmer Licht"]; !ok {
+		t.Error("expected proposal for 'Wohnzimmer Licht'")
+	} else if p.Type != "dimmer" {
+		t.Errorf("expected type dimmer, got %q", p.Type)
+	}
+	if p, ok := byBase["Gartenbeleuchtung"]; !ok {
+		t.Error("expected proposal for 'Gartenbeleuchtung'")
+	} else if p.Type != "switch" {
+		t.Errorf("expected type switch, got %q", p.Type)
 	}
 }
 

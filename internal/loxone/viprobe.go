@@ -113,7 +113,23 @@ func FetchVIProposals(c *Client) ([]VIProposal, error) {
 	log.Printf("viprobe: found %d VirtualInput VIs: %v", len(allVIs), allVIs)
 
 	proposals := groupVIs(allVIs)
-	log.Printf("viprobe: grouped into %d proposals", len(proposals))
+
+	// Also collect direct functional controls (Dimmer, Switch, LightControllerV2).
+	// LoxAPP3.json never contains VirtualInput types since those have no app
+	// visualisation — but Dimmer/Switch/etc. respond to the same io endpoint.
+	var directProps []VIProposal
+	for _, ctrl := range controls {
+		collectDirectControls(ctrl, &directProps)
+	}
+	if len(directProps) > 0 {
+		sort.Slice(directProps, func(i, j int) bool {
+			return directProps[i].Base < directProps[j].Base
+		})
+		log.Printf("viprobe: found %d direct controls (Dimmer/Switch/LightControllerV2)", len(directProps))
+		proposals = append(proposals, directProps...)
+	}
+
+	log.Printf("viprobe: grouped into %d proposals total", len(proposals))
 	return proposals, nil
 }
 
@@ -137,6 +153,39 @@ func collectVIs(ctrl loxControl, out *[]string) {
 	}
 	for _, sub := range ctrl.SubControls {
 		collectVIs(sub, out)
+	}
+}
+
+// loxoneDirectType maps a Loxone control type to an EchoLox device type.
+// Returns ("", false) for types not suitable for direct Alexa control.
+func loxoneDirectType(loxType string) (string, bool) {
+	switch strings.ToLower(loxType) {
+	case "dimmer":
+		return "dimmer", true
+	case "lightcontrollerv2":
+		return "dimmer", true
+	case "switch", "timedswitch":
+		return "switch", true
+	default:
+		return "", false
+	}
+}
+
+// collectDirectControls appends one VIProposal for each functional Loxone control
+// (Dimmer, Switch, LightControllerV2) found recursively in ctrl.
+// These controls are addressed by their name via /dev/sps/io/<name>/<cmd>.
+func collectDirectControls(ctrl loxControl, out *[]VIProposal) {
+	if dtype, ok := loxoneDirectType(ctrl.Type); ok && ctrl.Name != "" {
+		*out = append(*out, VIProposal{
+			Base:        ctrl.Name,
+			DisplayName: ctrl.Name,
+			Type:        dtype,
+			SwitchMode:  "onoff",
+			VIs:         []string{ctrl.Name},
+		})
+	}
+	for _, sub := range ctrl.SubControls {
+		collectDirectControls(sub, out)
 	}
 }
 

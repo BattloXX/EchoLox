@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -39,8 +40,9 @@ func (c *Client) sendHTTP(viName, value string) error {
 	if port == "" {
 		port = "80"
 	}
-	url := fmt.Sprintf("http://%s:%s/dev/sps/io/%s/%s", c.ms.IPAddress, port, viName, value)
-	req, err := http.NewRequest("GET", url, nil)
+	rawURL := fmt.Sprintf("http://%s:%s/dev/sps/io/%s/%s",
+		c.ms.IPAddress, port, url.PathEscape(viName), value)
+	req, err := http.NewRequest("GET", rawURL, nil)
 	if err != nil {
 		return err
 	}

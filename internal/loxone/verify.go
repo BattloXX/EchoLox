@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -173,8 +174,8 @@ func (v *Verifier) probeVI(name string) VIStatus {
 }
 
 func (v *Verifier) doProbe(name string) VIStatus {
-	url := v.client.BaseURL() + "/jdev/sps/io/" + name
-	req, err := http.NewRequest("GET", url, nil)
+	probeURL := v.client.BaseURL() + "/jdev/sps/io/" + url.PathEscape(name)
+	req, err := http.NewRequest("GET", probeURL, nil)
 	if err != nil {
 		return StatusNotFound
 	}

@@ -116,16 +116,32 @@ func (h *Handler) handleDiscoverLoxoneImport(w http.ResponseWriter, r *http.Requ
 			continue
 		}
 		existingNames[norm] = true
-		// Build VirtualInputs from the actual Miniserver VI names so that
-		// non-standard names (hyphens, etc.) are preserved exactly.
+		// Build VirtualInputs map.
+		// Direct controls (Dimmer, Switch, LightControllerV2) have a single VI
+		// equal to the base name — map all roles to that same name so Loxone
+		// receives e.g. /dev/sps/io/WohnzimmerLicht/1 for on and /50 for brightness.
 		vis := make(map[string]string, len(p.VIs))
-		for _, vi := range p.VIs {
-			role := strings.TrimPrefix(vi, p.Base)
-			role = strings.TrimPrefix(role, "_")
-			if role == "" {
-				role = "on" // bare base VI = OnOff "on" input
+		if len(p.VIs) == 1 && p.VIs[0] == p.Base {
+			name := p.Base
+			vis["on"] = name
+			vis["off"] = name
+			switch device.DeviceType(p.Type) {
+			case device.TypeDimmer:
+				vis["brightness"] = name
+			case device.TypeColor:
+				vis["brightness"] = name
+				vis["hue"] = name
+				vis["saturation"] = name
 			}
-			vis[role] = vi
+		} else {
+			for _, vi := range p.VIs {
+				role := strings.TrimPrefix(vi, p.Base)
+				role = strings.TrimPrefix(role, "_")
+				if role == "" {
+					role = "on"
+				}
+				vis[role] = vi
+			}
 		}
 		d := &device.Device{
 			Name:          p.DisplayName,
