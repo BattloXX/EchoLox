@@ -60,8 +60,10 @@ func FetchVIProposals(c *Client) ([]VIProposal, error) {
 }
 
 // collectEcholoxVIs appends all echolox_* names found in ctrl and its subControls.
+// The prefix check is case-insensitive so that VIs named "EchoLox_*" or
+// "ECHOLOX_*" are found as well; the original name is preserved for HTTP commands.
 func collectEcholoxVIs(ctrl loxControl, out *[]string) {
-	if strings.HasPrefix(ctrl.Name, "echolox_") {
+	if strings.HasPrefix(strings.ToLower(ctrl.Name), "echolox_") {
 		*out = append(*out, ctrl.Name)
 	}
 	for _, sub := range ctrl.SubControls {
@@ -153,7 +155,12 @@ func groupEcholoxVIs(vis []string) []VIProposal {
 }
 
 func viBaseToDisplayName(base string) string {
-	name := strings.TrimPrefix(base, "echolox_")
+	// Strip the echolox_ prefix case-insensitively so "EchoLox_Licht" and
+	// "echolox_licht" both produce the same display name.
+	name := base
+	if len(base) >= 8 && strings.ToLower(base[:8]) == "echolox_" {
+		name = base[8:]
+	}
 	words := strings.Split(name, "_")
 	for i, w := range words {
 		if len(w) > 0 {

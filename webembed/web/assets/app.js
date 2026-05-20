@@ -851,12 +851,21 @@ async function scanLoxone() {
       return;
     }
     loxProposals = data || [];
-    const newOnes = loxProposals.filter(p => !p.already_exists);
-    if (!newOnes.length) {
-      if (emptyEl) emptyEl.style.display = '';
+    if (!loxProposals.length) {
+      // Miniserver returned no echolox_* VIs at all
+      if (emptyEl) {
+        emptyEl.textContent = 'Keine echolox_*-Virtual Inputs auf dem Miniserver gefunden. Prüfe ob VIs mit dem Prefix „echolox_" im Loxone Programm angelegt sind.';
+        emptyEl.style.display = '';
+      }
       return;
     }
-    renderLoxProposals(newOnes);
+    const newCount = loxProposals.filter(p => !p.already_exists).length;
+    if (!newCount && emptyEl) {
+      // VIs found but every one is already imported — show info + still render table
+      emptyEl.textContent = `Alle ${loxProposals.length} gefundene(n) echolox_*-VI(s) bereits importiert — werden unten zur Übersicht angezeigt.`;
+      emptyEl.style.display = '';
+    }
+    renderLoxProposals(loxProposals);
     if (resultEl) resultEl.style.display = '';
   } catch(e) {
     if (errEl) { errEl.style.display = ''; errEl.textContent = '✗ ' + e.message; }
@@ -874,14 +883,18 @@ function renderLoxProposals(proposals) {
     const modeLabel = p.switch_mode === 'impulse'
       ? '<span class="type-badge" style="background:#7c6">Impuls</span>'
       : '<span class="type-badge" style="background:#68a">Ein/Aus</span>';
+    const statusLabel = p.already_exists
+      ? '<span style="color:#888;font-size:0.85em">✓ importiert</span>'
+      : '<span style="color:#2e7d32;font-size:0.85em;font-weight:bold">neu</span>';
     const tr = document.createElement('tr');
+    if (p.already_exists) tr.style.opacity = '0.55';
     tr.innerHTML = `
-      <td><input type="checkbox" class="lox-check" value="${p.base}" checked></td>
+      <td><input type="checkbox" class="lox-check" value="${p.base}" ${p.already_exists ? '' : 'checked'}></td>
       <td>${p.display_name}</td>
       <td><span class="type-badge">${p.type}</span></td>
       <td>${p.type !== 'scene' ? modeLabel : '—'}</td>
       <td>${vis}</td>
-      <td><span style="color:#888;font-size:0.85em">neu</span></td>`;
+      <td>${statusLabel}</td>`;
     tbody.appendChild(tr);
   });
 }
