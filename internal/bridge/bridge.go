@@ -47,6 +47,7 @@ func Run(cfg *Config, cfgPath string, version string) error {
 	}
 	var ms *loxone.LBMiniserver
 	if lbs != nil {
+		logbuf.Global.Info("Miniserver config: %d entry/entries found, looking for key %q", len(lbs), cfg.Loxone.Miniserver)
 		if entry, ok := lbs[cfg.Loxone.Miniserver]; ok {
 			ms = &entry
 		} else {
@@ -60,7 +61,11 @@ func Run(cfg *Config, cfgPath string, version string) error {
 
 	var loxClient *loxone.Client
 	if ms != nil {
+		logbuf.Global.Info("Loxone client: IP=%s Port=%s User=%q Transport=%s",
+			ms.IPAddress, ms.Port, ms.Admin, cfg.Loxone.Transport)
 		loxClient = loxone.NewClient(ms, cfg.Loxone.Transport, cfg.Loxone.UDPPort)
+	} else {
+		logbuf.Global.Info("WARNING: no Miniserver entry found — discovery and commands disabled")
 	}
 
 	verifier := loxone.NewVerifier(loxClient)
