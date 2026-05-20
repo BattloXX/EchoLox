@@ -241,6 +241,14 @@ func (a *API) handleStateChange(w http.ResponseWriter, r *http.Request, d *devic
 	}
 	if body.Bri != nil {
 		state.Brightness = *body.Bri
+		// Loxone requires the "on" state to be received before the brightness
+		// value for Dimmer devices. When the caller sends only bri (no on field),
+		// inject the on=1 signal first so Loxone processes the brightness correctly.
+		if d.Type == device.TypeDimmer && body.On == nil {
+			if vi, ok := d.VirtualInputs["on"]; ok {
+				a.send(d.ID, vi, "1")
+			}
+		}
 		if vi, ok := d.VirtualInputs["brightness"]; ok {
 			a.send(d.ID, vi, strconv.Itoa(BriToPct(*body.Bri)))
 		}
