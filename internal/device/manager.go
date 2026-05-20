@@ -180,11 +180,12 @@ func (m *Manager) selfHeal(devices []*Device) (changed bool) {
 			changed = true
 		}
 
-		// ── VirtualInputs — regenerate when empty or prefix mismatched ───
-		expected := GenerateVirtualInputs(d.Name, d.Type, d.SwitchMode)
-		if len(d.VirtualInputs) == 0 || !virtualInputsMatch(d.VirtualInputs, expected) {
-			d.VirtualInputs = expected
-			log.Printf("selfHeal: device %q: virtual_inputs regenerated", d.Name)
+		// ── VirtualInputs — generate only when absent; do not overwrite
+		// non-empty maps so that discovery-imported or custom VI names are
+		// preserved across restarts.
+		if len(d.VirtualInputs) == 0 {
+			d.VirtualInputs = GenerateVirtualInputs(d.Name, d.Type, d.SwitchMode)
+			log.Printf("selfHeal: device %q: virtual_inputs generated", d.Name)
 			changed = true
 		}
 
@@ -201,19 +202,6 @@ func (m *Manager) selfHeal(devices []*Device) (changed bool) {
 		m.buildIndexes(devices)
 	}
 	return changed
-}
-
-// virtualInputsMatch returns true when all keys/values in want are present in got.
-func virtualInputsMatch(got, want map[string]string) bool {
-	if len(got) != len(want) {
-		return false
-	}
-	for k, v := range want {
-		if got[k] != v {
-			return false
-		}
-	}
-	return true
 }
 
 // backupAndPersist saves a .bak copy of the current devices.json, then persists devices.

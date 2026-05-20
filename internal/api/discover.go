@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/BattloXX/EchoLox/internal/device"
 	"github.com/BattloXX/EchoLox/internal/discovery"
@@ -115,11 +116,23 @@ func (h *Handler) handleDiscoverLoxoneImport(w http.ResponseWriter, r *http.Requ
 			continue
 		}
 		existingNames[norm] = true
+		// Build VirtualInputs from the actual Miniserver VI names so that
+		// non-standard names (hyphens, etc.) are preserved exactly.
+		vis := make(map[string]string, len(p.VIs))
+		for _, vi := range p.VIs {
+			role := strings.TrimPrefix(vi, p.Base)
+			role = strings.TrimPrefix(role, "_")
+			if role == "" {
+				role = "on" // bare base VI = OnOff "on" input
+			}
+			vis[role] = vi
+		}
 		d := &device.Device{
-			Name:       p.DisplayName,
-			Type:       device.DeviceType(p.Type),
-			SwitchMode: device.SwitchMode(p.SwitchMode),
-			Transport:  "http",
+			Name:          p.DisplayName,
+			Type:          device.DeviceType(p.Type),
+			SwitchMode:    device.SwitchMode(p.SwitchMode),
+			Transport:     "http",
+			VirtualInputs: vis,
 		}
 		if err := h.mgr.Create(d); err != nil {
 			errors[base] = err.Error()
