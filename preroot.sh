@@ -2,6 +2,10 @@
 # EchoLox preroot.sh — runs as root before installation/update.
 # Stops the running service and backs up devices.json.
 
+LBHOMEDIR="${LBHOMEDIR:-/opt/loxberry}"
+LBPDATADIR="${LBPDATADIR:-$LBHOMEDIR/data/plugins/EchoLox}"
+LBPCFGDIR="${LBPCFGDIR:-$LBHOMEDIR/config/plugins/EchoLox}"
+
 # Stop via systemd
 if systemctl is-active --quiet echolox.service 2>/dev/null; then
     systemctl stop echolox.service
@@ -9,7 +13,7 @@ if systemctl is-active --quiet echolox.service 2>/dev/null; then
 fi
 
 # Stop via daemon script as fallback
-DAEMONSCRIPT="${LBHOMEDIR:-/opt/loxberry}/daemon/plugins/EchoLox/EchoLox"
+DAEMONSCRIPT="$LBHOMEDIR/daemon/plugins/EchoLox/EchoLox"
 if [ -x "$DAEMONSCRIPT" ]; then
     "$DAEMONSCRIPT" stop 2>/dev/null
 fi
@@ -25,11 +29,14 @@ pkill -f "bin/plugins/EchoLox/EchoLox" 2>/dev/null
 sleep 1
 echo "<OK> EchoLox stopped"
 
-# Backup devices.json so it survives the update
-DEVICES_JSON="${LBPDATADIR:-/opt/loxberry/data/plugins/EchoLox}/devices.json"
+# Backup devices.json to the config directory, which LoxBerry preserves across
+# plugin updates (unlike /tmp which is volatile and may be wiped during updates).
+DEVICES_JSON="$LBPDATADIR/devices.json"
+BACKUP_PATH="$LBPCFGDIR/devices.json.bak"
 if [ -f "$DEVICES_JSON" ]; then
-    cp "$DEVICES_JSON" /tmp/EchoLox_devices.bak
-    echo "<OK> EchoLox devices backed up"
+    mkdir -p "$LBPCFGDIR"
+    cp "$DEVICES_JSON" "$BACKUP_PATH"
+    echo "<OK> EchoLox devices backed up to $BACKUP_PATH"
 fi
 
 # Ensure icon destination exists for the installer
