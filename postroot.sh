@@ -44,7 +44,7 @@ mkdir -p "$LBPDATADIR" "$LBPLOGDIR"
 chown -R loxberry:loxberry "$LBPDATADIR" "$LBPLOGDIR" 2>/dev/null || true
 
 # ── 4. Restore devices.json after update ────────────────────────────────────
-BACKUP_PATH="$LBPCFGDIR/devices.json.bak"
+BACKUP_PATH="/var/tmp/EchoLox_devices.bak"
 if [ ! -f "$LBPDATADIR/devices.json" ] && [ -f "$BACKUP_PATH" ]; then
     cp "$BACKUP_PATH" "$LBPDATADIR/devices.json"
     chown loxberry:loxberry "$LBPDATADIR/devices.json" 2>/dev/null || true

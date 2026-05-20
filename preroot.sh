@@ -4,7 +4,6 @@
 
 LBHOMEDIR="${LBHOMEDIR:-/opt/loxberry}"
 LBPDATADIR="${LBPDATADIR:-$LBHOMEDIR/data/plugins/EchoLox}"
-LBPCFGDIR="${LBPCFGDIR:-$LBHOMEDIR/config/plugins/EchoLox}"
 
 # Stop via systemd
 if systemctl is-active --quiet echolox.service 2>/dev/null; then
@@ -29,12 +28,13 @@ pkill -f "bin/plugins/EchoLox/EchoLox" 2>/dev/null
 sleep 1
 echo "<OK> EchoLox stopped"
 
-# Backup devices.json to the config directory, which LoxBerry preserves across
-# plugin updates (unlike /tmp which is volatile and may be wiped during updates).
+# Backup devices.json to /var/tmp — outside the plugin directory tree so it
+# survives LoxBerry's purge_installation (which wipes $LBPDATADIR and
+# $LBPCFGDIR between preroot.sh and postroot.sh), and persists across reboots
+# (unlike /tmp which is a tmpfs on most LoxBerry systems).
 DEVICES_JSON="$LBPDATADIR/devices.json"
-BACKUP_PATH="$LBPCFGDIR/devices.json.bak"
+BACKUP_PATH="/var/tmp/EchoLox_devices.bak"
 if [ -f "$DEVICES_JSON" ]; then
-    mkdir -p "$LBPCFGDIR"
     cp "$DEVICES_JSON" "$BACKUP_PATH"
     echo "<OK> EchoLox devices backed up to $BACKUP_PATH"
 fi
