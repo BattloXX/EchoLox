@@ -45,7 +45,7 @@ Loxone bleibt die einzige Automations-Zentrale. EchoLox ist ausschliesslich die 
 - [Virtual Inputs in Loxone einrichten](#virtual-inputs-in-loxone-einrichten)
 - [Alexa-Erkennung](#alexa-erkennung)
 - [Sprachbefehle](#sprachbefehle)
-- [Transports: HTTP, UDP, MQTT](#transports-http-udp-mqtt)
+- [Transports: HTTP und UDP](#transports-http-und-udp)
 - [Status-Übersicht](#status-übersicht)
 - [Backup & Restore](#backup--restore)
 - [Logs & Diagnose](#logs--diagnose)
@@ -132,6 +132,17 @@ apache2ctl graceful
 ```
 
 </details>
+
+### Alternative: Port 80 gemeinsam mit LoxBerry nutzen (Reverse-Proxy, experimentell)
+
+Optional kann Apache auf Port 80 bleiben, während EchoLox intern auf Port `8098` lauscht. Das Setup leitet ausschließlich die für die Hue-Emulation benötigten Pfade an EchoLox weiter und kündigt gegenüber Alexa weiterhin Port 80 an:
+
+```bash
+sudo /opt/loxberry/bin/plugins/EchoLox/reverse-proxy-setup.sh --setup
+systemctl restart echolox.service
+```
+
+Diese Variante patcht LoxBerrys zentrale Apache-vHost-Datei und ist kein offizieller LoxBerry-Erweiterungspunkt. Ein LoxBerry-Core-Update kann den markierten EchoLox-Block daher entfernen. EchoLox erkennt das im Reverse-Proxy-Modus automatisch: Unter **EchoLox → Einstellungen → Port 80 / Reverse-Proxy** erscheint dann eine Warnung mit **Reverse-Proxy wiederherstellen**. Die Reparatur benötigt kein SSH.
 
 ### 2. LoxBerry-SSDP-Dienst deaktivieren
 
@@ -315,7 +326,7 @@ EchoLox sendet beim Start einen SSDP NOTIFY und danach alle **30 Minuten** erneu
 
 ---
 
-## Transports: HTTP, UDP, MQTT
+## Transports: HTTP und UDP
 
 ### HTTP (Standard)
 
@@ -336,9 +347,7 @@ Port einstellbar (Standard: 7777). Kein Handshake — sehr geringe Latenz.
 
 ### MQTT
 
-EchoLox publisht auf `loxone/{name}` mit dem Wert als Payload.
-
-**Einstellungen:** Broker-URL, Benutzername und Passwort unter **EchoLox → Einstellungen**.
+MQTT-Publish für ausgehende EchoLox-Befehle ist noch nicht implementiert und wird deshalb nicht als Transport angeboten. Alte Konfigurationen mit `transport: "mqtt"` liefern einen eindeutigen Fehler, statt Befehle unbemerkt per HTTP zu senden.
 
 **MQTT Subscriptions (MQTT → Loxone):** Eingehende MQTT-Nachrichten können direkt an Virtual Inputs weitergeleitet werden. Konfiguration unter **Einstellungen → MQTT Subscriptions**:
 
@@ -438,6 +447,7 @@ Pfad: `/opt/loxberry/data/plugins/EchoLox/EchoLox.cfg`
 ```yaml
 server:
   port: 80             # Port auf dem EchoLox lauscht (direkt, kein Proxy)
+  discovery_port: 0    # extern angekündigter Port; 0 = gleicher Wert wie port
   ip: ""               # leer = automatisch erkannt
 
 upnp:
@@ -445,7 +455,7 @@ upnp:
 
 loxone:
   miniserver: "1"      # Miniserver-ID aus LoxBerry-Konfiguration
-  transport: "http"    # http, udp oder mqtt
+  transport: "http"    # http oder udp
   udp_port: 7777
 
 mqtt:
@@ -466,13 +476,19 @@ Miniserver-IP und Credentials werden automatisch aus `/opt/loxberry/config/syste
 
 EchoLox unterstützt LoxBerrys eingebaute **Plugin-Autoupdate-Funktion**. Der Plugin Manager prüft regelmäßig [`release.cfg`](https://raw.githubusercontent.com/BattloXX/EchoLox/main/release.cfg) auf neue Versionen und meldet verfügbare Updates.
 
+Das vorhandene Autoupdate-Format wurde gegen LoxBerry 4.0.0 (Stand 4.0.0.13 stable) geprüft und ist kompatibel.
+
 Die `release.cfg` wird bei jedem Release automatisch durch GitHub Actions aktualisiert.
 
-> **Nach einem Update:** `postinstall.sh` setzt `CAP_NET_BIND_SERVICE` automatisch neu — kein manueller Eingriff nötig.
+> **Nach einem Update:** Für den direkten Port-80-Modus setzt `postinstall.sh` `CAP_NET_BIND_SERVICE` automatisch neu. Im Reverse-Proxy-Modus wird die nicht benötigte Capability wieder entfernt.
 
 ---
 
 ## Technische Architektur
+
+### IPv6-Unterstützung
+
+Die lokale EchoLox-Weboberfläche und Hue-HTTP-API lauschen zusätzlich best-effort auf IPv6. Ist der IPv6-Port beispielsweise noch durch Apache belegt, läuft EchoLox ohne Unterbrechung über IPv4 weiter. SSDP und Alexa-Discovery bleiben absichtlich IPv4-only: Hue-kompatible Discovery verwendet IPv4-Multicast und die angekündigte Bridge-Adresse muss für Alexa eine IPv4-Adresse sein.
 
 ```
 cmd/EchoLox/
@@ -543,6 +559,8 @@ GET/POST/PUT/DELETE /echolox/api/devices     Geräte-CRUD
 GET/POST /echolox/api/mqtt/subscriptions     MQTT Subscriptions
 DELETE   /echolox/api/mqtt/subscriptions     Subscription entfernen
 POST     /echolox/api/restart                Dienst neu starten
+GET      /echolox/api/reverse-proxy/status   Reverse-Proxy-Status
+POST     /echolox/api/reverse-proxy/repair   Apache-Block wiederherstellen
 GET/POST /echolox/api/backup                 Backup erstellen/auflisten
 GET      /echolox/api/backup/download        Backup herunterladen
 POST     /echolox/api/backup/restore         Backup wiederherstellen
@@ -594,6 +612,14 @@ Prüfpunkte in dieser Reihenfolge:
 ss -tlnp | grep ':80'      # EchoLox muss hier erscheinen
 ss -ulnp | grep ':1900'    # EchoLox muss hier erscheinen, lbssdpd nicht
 ```
+
+Falls trotz umgestelltem LoxBerry-Webport noch ein `tcp6`-Listener auf Port 80 erscheint, liegt wahrscheinlich das bekannte Apache-IPv6-Problem aus LoxBerry Issue #1481 vor:
+
+```bash
+ss -tlnp | grep 'tcp6.*:80'
+```
+
+Dann `ports.conf` auf verbliebene `Listen 80`-Einträge prüfen und Apache vollständig neu starten. EchoLox bindet bewusst nur IPv4, damit ein verbliebener IPv6-Listener den Start nicht verhindert.
 
 **2. Debug-Logs aktivieren**
 `/echoloxui/logs.html` → Debug aktivieren → "Alexa, suche Geräte" → `SSDP M-SEARCH` im Log vorhanden?

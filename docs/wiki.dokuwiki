@@ -126,7 +126,7 @@ upnp:
 
 loxone:
   miniserver: "1"      # Miniserver-ID aus LoxBerry-Konfiguration
-  transport: "http"    # http | udp | mqtt
+  transport: "http"    # http | udp (MQTT-Publish ist noch nicht implementiert)
   udp_port: 7777
 
 mqtt:
@@ -319,7 +319,7 @@ echolox_wohnzimmer_licht_on=1\r\n
 Kein TCP-Handshake — sehr geringe Latenz.
 
 ==== MQTT ====
-EchoLox publisht auf ''loxone/{name}'' mit dem Wert als Payload.
+MQTT-Publish für ausgehende EchoLox-Befehle ist noch nicht implementiert. Eingehende MQTT-Subscriptions (MQTT → Loxone) bleiben verfügbar.
 
 **MQTT Subscriptions (MQTT → Loxone):** Eingehende MQTT-Nachrichten können direkt an Virtual Inputs weitergeleitet werden (EchoLox → Einstellungen → MQTT Subscriptions).
 

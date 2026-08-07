@@ -17,16 +17,24 @@ var (
 	devices = map[string]*AlexaDevice{}
 )
 
+const alexaDeviceTTL = 24 * time.Hour
+
 func RecordAlexa(ip, ua string) {
 	mu.Lock()
 	defer mu.Unlock()
+	now := time.Now()
+	for key, device := range devices {
+		if now.Sub(device.LastSeen) > alexaDeviceTTL {
+			delete(devices, key)
+		}
+	}
 	if e, ok := devices[ip]; ok {
-		e.LastSeen = time.Now()
+		e.LastSeen = now
 		if ua != "" {
 			e.UserAgent = ua
 		}
 	} else {
-		devices[ip] = &AlexaDevice{IP: ip, UserAgent: ua, LastSeen: time.Now()}
+		devices[ip] = &AlexaDevice{IP: ip, UserAgent: ua, LastSeen: now}
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/BattloXX/EchoLox/internal/discovery"
@@ -26,12 +27,22 @@ const (
 
 // Listener listens for SSDP M-SEARCH packets and responds to Alexa discovery.
 type Listener struct {
-	info     identity.BridgeInfo
-	notifyCh chan struct{} // send to trigger an immediate NOTIFY burst
+	info          identity.BridgeInfo
+	notifyCh      chan struct{} // send to trigger an immediate NOTIFY burst
+	responseMu    sync.Mutex
+	lastResponses map[string]time.Time
+	responseSlots chan struct{}
 }
 
+const responseInterval = time.Second
+
 func NewListener(info identity.BridgeInfo) *Listener {
-	return &Listener{info: info, notifyCh: make(chan struct{}, 1)}
+	return &Listener{
+		info:          info,
+		notifyCh:      make(chan struct{}, 1),
+		lastResponses: make(map[string]time.Time),
+		responseSlots: make(chan struct{}, 16),
+	}
 }
 
 // TriggerNotify requests an immediate SSDP NOTIFY burst (non-blocking).
@@ -84,10 +95,37 @@ func (l *Listener) Listen() {
 			ua := extractHeader(msg, "user-agent")
 			discovery.RecordAlexa(src.IP.String(), ua)
 			st := extractHeader(msg, "st")
-			logbuf.Global.Info("SSDP M-SEARCH from %s (ST: %s) — responding (LOCATION: %s)", src, st, l.location())
-			go l.respond(src, st)
+			if l.allowResponse(src.IP.String(), time.Now()) {
+				logbuf.Global.Info("SSDP M-SEARCH from %s (ST: %s) — responding (LOCATION: %s)", src, st, l.location())
+				select {
+				case l.responseSlots <- struct{}{}:
+					go func() {
+						defer func() { <-l.responseSlots }()
+						l.respond(src, st)
+					}()
+				default:
+					logbuf.Global.Debug("SSDP response dropped: responder pool is full")
+				}
+			} else {
+				logbuf.Global.Debug("SSDP response to %s rate-limited", src.IP)
+			}
 		}
 	}
+}
+
+func (l *Listener) allowResponse(ip string, now time.Time) bool {
+	l.responseMu.Lock()
+	defer l.responseMu.Unlock()
+	if last, ok := l.lastResponses[ip]; ok && now.Sub(last) < responseInterval {
+		return false
+	}
+	l.lastResponses[ip] = now
+	for key, last := range l.lastResponses {
+		if now.Sub(last) > time.Minute {
+			delete(l.lastResponses, key)
+		}
+	}
+	return true
 }
 
 // notifyLoop sends an initial 3-packet burst then repeats every 5 min (or on demand).

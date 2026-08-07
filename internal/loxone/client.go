@@ -30,8 +30,10 @@ func (c *Client) Send(viName, value string) error {
 	switch c.transport {
 	case "udp":
 		return c.sendUDP(viName, value)
-	default:
+	case "http", "":
 		return c.sendHTTP(viName, value)
+	default:
+		return fmt.Errorf("unsupported Loxone transport %q (supported: http, udp)", c.transport)
 	}
 }
 
@@ -40,8 +42,9 @@ func (c *Client) sendHTTP(viName, value string) error {
 	if port == "" {
 		port = "80"
 	}
-	rawURL := fmt.Sprintf("http://%s:%s/dev/sps/io/%s/%s",
-		c.ms.IPAddress, port, url.PathEscape(viName), value)
+	hostPort := net.JoinHostPort(c.ms.IPAddress, port)
+	rawURL := fmt.Sprintf("http://%s/dev/sps/io/%s/%s",
+		hostPort, url.PathEscape(viName), value)
 	req, err := http.NewRequest("GET", rawURL, nil)
 	if err != nil {
 		return err
@@ -59,7 +62,7 @@ func (c *Client) sendHTTP(viName, value string) error {
 }
 
 func (c *Client) sendUDP(viName, value string) error {
-	addr := fmt.Sprintf("%s:%d", c.ms.IPAddress, c.udpPort)
+	addr := net.JoinHostPort(c.ms.IPAddress, fmt.Sprintf("%d", c.udpPort))
 	conn, err := net.Dial("udp", addr)
 	if err != nil {
 		return err
@@ -75,7 +78,7 @@ func (c *Client) BaseURL() string {
 	if port == "" {
 		port = "80"
 	}
-	return fmt.Sprintf("http://%s:%s", c.ms.IPAddress, port)
+	return "http://" + net.JoinHostPort(c.ms.IPAddress, port)
 }
 
 func (c *Client) Credentials() (string, string) {

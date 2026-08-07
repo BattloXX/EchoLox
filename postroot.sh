@@ -12,6 +12,7 @@ LBPBINDIR="${LBPBINDIR:-$LBHOMEDIR/bin/plugins/EchoLox}"
 LBPCFGDIR="${LBPCFGDIR:-$LBHOMEDIR/config/plugins/EchoLox}"
 LBPDATADIR="${LBPDATADIR:-$LBHOMEDIR/data/plugins/EchoLox}"
 LBPLOGDIR="${LBPLOGDIR:-$LBHOMEDIR/log/plugins/EchoLox}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 DAEMONDIR="$LBHOMEDIR/daemon/plugins/EchoLox"
 PIDFILE="/tmp/EchoLox.pid"
@@ -59,17 +60,11 @@ if [ -f "$CFGFILE" ]; then
         sed -i 's/port: 8079/port: 80/' "$CFGFILE"
         echo "<OK> EchoLox config migrated: port 8079 → 80"
     fi
-    # Remove discovery_port (no longer used)
-    if grep -q 'discovery_port' "$CFGFILE"; then
-        sed -i '/discovery_port/d' "$CFGFILE"
-        echo "<OK> EchoLox config migrated: discovery_port removed"
-    fi
 else
     # Migrate from old config-dir location if present
     if [ -f "$LBPCFGDIR/EchoLox.cfg" ]; then
         cp "$LBPCFGDIR/EchoLox.cfg" "$CFGFILE"
         sed -i 's/port: 8079/port: 80/' "$CFGFILE" 2>/dev/null || true
-        sed -i '/discovery_port/d' "$CFGFILE" 2>/dev/null || true
         echo "<OK> EchoLox config migrated from config dir"
     else
         cat > "$CFGFILE" << CFGEOF
@@ -88,9 +83,17 @@ CFGEOF
 fi
 chown loxberry:loxberry "$CFGFILE" 2>/dev/null || true
 
+# Reverse-proxy mode listens on an unprivileged internal port.
+if grep -qE '^[[:space:]]*discovery_port:[[:space:]]*[1-9][0-9]*' "$CFGFILE"; then
+    setcap -r "$LBPBINDIR/EchoLox" 2>/dev/null || true
+fi
+
 # ── 6. Sanity checks (non-fatal) ─────────────────────────────────────────────
 if ss -tlnp 2>/dev/null | grep -qE ':80\s'; then
     echo "<WARN> EchoLox: port 80 is already in use — move LoxBerry admin port to 88 first"
+fi
+if ss -tlnp 2>/dev/null | grep -q 'tcp6.*:80' || ss -tlnp6 2>/dev/null | grep -qE ':80\s'; then
+    echo "<WARN> EchoLox: tcp6 port 80 is still occupied — known Apache IPv6 issue (LoxBerry #1481); this may prevent EchoLox's optional IPv6 listener from binding, while IPv4 remains available"
 fi
 if systemctl is-active --quiet lbssdpd 2>/dev/null; then
     echo "<WARN> EchoLox: lbssdpd is active — disable it: systemctl disable --now lbssdpd"
@@ -186,6 +189,10 @@ for SIZE in 64 128 256 512; do
 done
 [ "$ICONS_OK" -gt 0 ] && echo "<OK> EchoLox icons installed ($ICONS_OK sizes)"
 
+# Install the opt-in reverse-proxy helper on every install/update.
+cp "$SCRIPT_DIR/scripts/reverse-proxy-setup.sh" "$LBPBINDIR/reverse-proxy-setup.sh"
+chmod +x "$LBPBINDIR/reverse-proxy-setup.sh"
+
 # ── 10. sudoers: allow loxberry to restart the service ───────────────────────
 SUDOERS_FILE="/etc/sudoers.d/echolox-restart"
 cat > "$SUDOERS_FILE" << 'SUDOEOF'
@@ -194,6 +201,13 @@ loxberry ALL=(ALL) NOPASSWD: /bin/systemctl restart echolox.service
 SUDOEOF
 chmod 0440 "$SUDOERS_FILE"
 echo "<OK> EchoLox sudoers rule installed"
+
+REVERSEPROXY_SUDOERS_FILE="/etc/sudoers.d/echolox-reverseproxy"
+cat > "$REVERSEPROXY_SUDOERS_FILE" << SUDOEOF
+loxberry ALL=(ALL) NOPASSWD: $LBPBINDIR/reverse-proxy-setup.sh --repair
+SUDOEOF
+chmod 0440 "$REVERSEPROXY_SUDOERS_FILE"
+echo "<OK> EchoLox reverse-proxy repair sudoers rule installed"
 
 echo "<OK> EchoLox installed — autostart via systemd enabled"
 exit 0

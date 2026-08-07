@@ -12,7 +12,7 @@ type Config struct {
 	Server struct {
 		Port          int    `yaml:"port"`
 		IP            string `yaml:"ip"`
-		DiscoveryPort int    `yaml:"discovery_port"` // deprecated: no-op, retained for config compatibility
+		DiscoveryPort int    `yaml:"discovery_port"` // externally advertised port; 0 uses Port
 	} `yaml:"server"`
 	UPNP struct {
 		Name string `yaml:"name"`

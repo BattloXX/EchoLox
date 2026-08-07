@@ -70,6 +70,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/echolox/api/verify", h.handleVerify)
 	mux.HandleFunc("/echolox/api/settings", h.handleSettings)
 	mux.HandleFunc("/echolox/api/restart", h.handleRestart)
+	mux.HandleFunc("/echolox/api/reverse-proxy/status", h.handleReverseProxyStatus)
+	mux.HandleFunc("/echolox/api/reverse-proxy/repair", h.handleReverseProxyRepair)
 	mux.HandleFunc("/echolox/api/backup/download", h.handleBackupDownload)
 	mux.HandleFunc("/echolox/api/backup/restore", h.handleBackupRestore)
 	mux.HandleFunc("/echolox/api/backup/restore-local", h.handleBackupRestoreLocal)
@@ -260,8 +262,9 @@ func (h *Handler) handleVerify(w http.ResponseWriter, r *http.Request) {
 // configYAML mirrors bridge.Config for reading/writing without an import cycle.
 type configYAML struct {
 	Server struct {
-		Port int    `yaml:"port"`
-		IP   string `yaml:"ip,omitempty"`
+		Port          int    `yaml:"port"`
+		IP            string `yaml:"ip,omitempty"`
+		DiscoveryPort int    `yaml:"discovery_port,omitempty"`
 	} `yaml:"server"`
 	UPNP struct {
 		Name string `yaml:"name,omitempty"`
@@ -278,6 +281,66 @@ type configYAML struct {
 		Password string `yaml:"password,omitempty"`
 	} `yaml:"mqtt,omitempty"`
 	DataDir string `yaml:"data_dir,omitempty"`
+}
+
+type reverseProxyStatus struct {
+	ModeConfigured     bool `json:"mode_configured"`
+	ApacheBlockPresent bool `json:"apache_block_present"`
+}
+
+func (h *Handler) getReverseProxyStatus() reverseProxyStatus {
+	var cfg configYAML
+	if data, err := os.ReadFile(h.cfgPath); err == nil {
+		_ = yaml.Unmarshal(data, &cfg)
+	}
+	status := reverseProxyStatus{
+		ModeConfigured: cfg.Server.DiscoveryPort > 0 && cfg.Server.Port != cfg.Server.DiscoveryPort,
+	}
+	lbHome := os.Getenv("LBHOMEDIR")
+	if lbHome == "" {
+		lbHome = "/opt/loxberry"
+	}
+	vhost := filepath.Join(lbHome, "system/apache2/sites-available/000-default.conf")
+	if data, err := os.ReadFile(vhost); err == nil {
+		status.ApacheBlockPresent = strings.Contains(string(data), "# BEGIN EchoLox reverse-proxy")
+	}
+	return status
+}
+
+func (h *Handler) handleReverseProxyStatus(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, h.getReverseProxyStatus())
+}
+
+func (h *Handler) handleReverseProxyRepair(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !h.getReverseProxyStatus().ModeConfigured {
+		writeErr(w, http.StatusConflict, fmt.Errorf("reverse-proxy mode is not configured"))
+		return
+	}
+	binDir := os.Getenv("LBPBINDIR")
+	if binDir == "" {
+		binDir = "/opt/loxberry/bin/plugins/EchoLox"
+	}
+	script := filepath.Join(binDir, "reverse-proxy-setup.sh")
+	output, err := exec.Command("sudo", script, "--repair").CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(output))
+		if msg == "" {
+			msg = err.Error()
+		}
+		writeErr(w, http.StatusInternalServerError, fmt.Errorf("reverse-proxy repair failed: %s", msg))
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok", "message": "Reverse-Proxy wurde wiederhergestellt"})
 }
 
 func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {

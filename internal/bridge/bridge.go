@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -107,8 +108,26 @@ func Run(cfg *Config, cfgPath string, version string) error {
 	go upnpListener.Listen()
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
-	logbuf.Global.Info("EchoLox HTTP server listening on %s", addr)
-	return http.ListenAndServe(addr, logRequests(mux))
+	ln, err := net.Listen("tcp4", addr)
+	if err != nil {
+		return err
+	}
+	defer ln.Close()
+	logbuf.Global.Info("EchoLox HTTP server listening on IPv4 %s", addr)
+
+	ln6, err := net.Listen("tcp6", addr)
+	if err != nil {
+		logbuf.Global.Info("WARNING: optional IPv6 HTTP listener unavailable on %s: %v", addr, err)
+	} else {
+		defer ln6.Close()
+		logbuf.Global.Info("EchoLox HTTP server listening on IPv6 %s", addr)
+		go func() {
+			if err := http.Serve(ln6, logRequests(mux)); err != nil && !errors.Is(err, net.ErrClosed) {
+				logbuf.Global.Info("WARNING: IPv6 HTTP server stopped: %v", err)
+			}
+		}()
+	}
+	return http.Serve(ln, logRequests(mux))
 }
 
 func logRequests(next http.Handler) http.Handler {

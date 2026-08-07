@@ -1,10 +1,12 @@
 const API = '/echolox/api';
 
-function toggleNav() {
-  document.getElementById('navLinks').classList.toggle('open');
+// ── Alexa Reset-Hint ───────────────────────────────────────────────────────────
+
+function restartFromHeader() {
+  fetch(`${API}/restart`, { method: 'POST' }).catch(() => {});
 }
 
-// ── Alexa Reset-Hint ───────────────────────────────────────────────────────────
+const syncIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7h-5V2"/><path d="M20 7a8 8 0 0 0-14-2M4 17h5v5"/><path d="M4 17a8 8 0 0 0 14 2"/></svg>';
 
 async function triggerAlexaReset() {
   const btn = document.getElementById('resetBtn');
@@ -17,14 +19,14 @@ async function triggerAlexaReset() {
     const data = await res.json();
     if (res.ok) {
       resultEl.innerHTML = `<span style="color:#2e7d32">&#10003; ${escapeHtml(data.message || 'SSDP-Burst gesendet.')}</span>`;
-      btn.textContent = '&#128260; Erneut senden';
+      btn.innerHTML = `${syncIcon} Erneut senden`;
     } else {
       resultEl.innerHTML = `<span style="color:#c00">Fehler: ${escapeHtml(data.error || 'Unbekannt')}</span>`;
-      btn.textContent = '&#128260; Alexa sauber neu verbinden (SSDP-Burst senden)';
+      btn.innerHTML = `${syncIcon} Alexa sauber neu verbinden (SSDP-Burst senden)`;
     }
   } catch(e) {
     resultEl.innerHTML = `<span style="color:#c00">Verbindungsfehler: ${escapeHtml(e.message)}</span>`;
-    btn.textContent = '&#128260; Alexa sauber neu verbinden (SSDP-Burst senden)';
+    btn.innerHTML = `${syncIcon} Alexa sauber neu verbinden (SSDP-Burst senden)`;
   } finally {
     btn.disabled = false;
   }
@@ -330,7 +332,8 @@ async function refreshStatus() {
 function filterStatus(filter) {
   currentFilter = filter;
   document.querySelectorAll('.filter-row .btn').forEach(b => b.classList.remove('active'));
-  const el = document.getElementById('f-' + filter);
+  const filterButtonIds = { all: 'f-all', ok: 'f-ok', not_found: 'f-nf', not_sent: 'f-ns' };
+  const el = document.getElementById(filterButtonIds[filter]);
   if (el) el.classList.add('active');
   renderStatus();
 }
@@ -339,7 +342,6 @@ function renderStatus() {
   const search = (document.getElementById('searchInput')?.value || '').toLowerCase();
   const tbody = document.getElementById('statusBody');
   if (!tbody) return;
-  const icons = { ok: '✅', not_found: '🟠', access_denied: '🔴', not_sent: '⬜' };
   tbody.innerHTML = '';
 
   const colToIcon = { status: 'ssort-status', name: 'ssort-name', device_name: 'ssort-device', last_value: 'ssort-value', last_sent: 'ssort-sent' };
@@ -367,7 +369,7 @@ function renderStatus() {
   rows.forEach(r => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><span class="status-${r.status}">${icons[r.status] || '?'} ${r.status}</span></td>
+      <td><span class="status-${r.status}"><span class="status-dot" aria-hidden="true"></span>${r.status}</span></td>
       <td style="font-family:monospace">${r.name}</td>
       <td>${r.device_name}</td>
       <td>${r.last_value || '—'}</td>
@@ -464,6 +466,51 @@ async function loadSettings() {
 
 function randomHex12() {
   return Array.from({length: 12}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+}
+
+async function loadReverseProxyStatus() {
+  const card = document.getElementById('reverseProxyCard');
+  const status = document.getElementById('reverseProxyStatus');
+  const button = document.getElementById('reverseProxyRepairBtn');
+  if (!card || !status || !button) return;
+  try {
+    const res = await fetch(`${API}/reverse-proxy/status`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.mode_configured) {
+      card.style.display = 'none';
+      return;
+    }
+    card.style.display = '';
+    if (data.apache_block_present) {
+      status.className = 'test-result ok';
+      status.textContent = '✓ Apache Reverse-Proxy ist eingerichtet.';
+      button.style.display = 'none';
+    } else {
+      status.className = 'test-result error';
+      status.textContent = '⚠ Der Apache Reverse-Proxy fehlt, vermutlich nach einem LoxBerry-Core-Update.';
+      button.style.display = '';
+    }
+  } catch (_) {
+    card.style.display = 'none';
+  }
+}
+
+async function repairReverseProxy() {
+  const status = document.getElementById('reverseProxyStatus');
+  const button = document.getElementById('reverseProxyRepairBtn');
+  if (button) { button.disabled = true; button.textContent = 'Wiederherstellung läuft…'; }
+  if (status) { status.className = 'test-result info'; status.textContent = 'Apache-Konfiguration wird wiederhergestellt…'; }
+  try {
+    const res = await fetch(`${API}/reverse-proxy/repair`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Wiederherstellung fehlgeschlagen');
+    await loadReverseProxyStatus();
+  } catch (e) {
+    if (status) { status.className = 'test-result error'; status.textContent = '✗ ' + e.message; }
+  } finally {
+    if (button) { button.disabled = false; button.textContent = 'Reverse-Proxy wiederherstellen'; }
+  }
 }
 
 async function testConnection() {
@@ -733,10 +780,10 @@ function toggleAutoRefresh() {
   logAutoRefresh = !logAutoRefresh;
   const btn = document.getElementById('autoRefreshBtn');
   if (logAutoRefresh) {
-    if (btn) { btn.textContent = 'Auto-Refresh stoppen'; btn.classList.add('active'); }
+    if (btn) { btn.innerHTML = `${syncIcon} Auto-Refresh stoppen`; btn.classList.add('active'); }
     logAutoRefreshTimer = setInterval(loadLogs, 5000);
   } else {
-    if (btn) { btn.textContent = 'Auto-Refresh'; btn.classList.remove('active'); }
+    if (btn) { btn.innerHTML = `${syncIcon} Auto-Refresh`; btn.classList.remove('active'); }
     clearInterval(logAutoRefreshTimer);
     logAutoRefreshTimer = null;
   }
