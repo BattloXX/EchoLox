@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/BattloXX/EchoLox/internal/lbloglevel"
 )
 
 // Level controls which messages are logged (0=Info, 1=Debug).
@@ -36,6 +38,34 @@ type Logger struct {
 	file      *os.File
 	filePath  string
 	fileBytes int64
+	lbFile    *os.File
+}
+
+// SetLBFile opens (or creates/appends) the LoxBerry-managed log file.
+// Pass "" to disable LoxBerry log output. Rotation is handled by LoxBerry.
+func (l *Logger) SetLBFile(path string) error {
+	if path == "" {
+		l.mu.Lock()
+		old := l.lbFile
+		l.lbFile = nil
+		l.mu.Unlock()
+		if old != nil {
+			old.Close()
+		}
+		return nil
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	l.mu.Lock()
+	old := l.lbFile
+	l.lbFile = f
+	l.mu.Unlock()
+	if old != nil {
+		old.Close()
+	}
+	return nil
 }
 
 // Global is the process-wide logger. Wire it with log.SetOutput(Global.Writer()).
@@ -131,6 +161,9 @@ func (l *Logger) write(msgLevel Level, levelStr, msg string) {
 		}
 		n, _ := l.file.WriteString(line)
 		l.fileBytes += int64(n)
+	}
+	if l.lbFile != nil && lbloglevel.ShouldForward(msgLevel == LevelDebug) {
+		_, _ = l.lbFile.WriteString("<" + levelStr + "> " + msg + "\n")
 	}
 	_, _ = os.Stderr.WriteString(line)
 }

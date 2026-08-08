@@ -7,12 +7,15 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/BattloXX/EchoLox/internal/api"
 	"github.com/BattloXX/EchoLox/internal/device"
 	"github.com/BattloXX/EchoLox/internal/hue"
 	"github.com/BattloXX/EchoLox/internal/identity"
+	"github.com/BattloXX/EchoLox/internal/lbloglevel"
 	"github.com/BattloXX/EchoLox/internal/logbuf"
 	"github.com/BattloXX/EchoLox/internal/loxone"
 	"github.com/BattloXX/EchoLox/internal/migrate"
@@ -34,6 +37,31 @@ func Run(cfg *Config, cfgPath string, version string) error {
 		} else {
 			logbuf.Global.Info("Log file: %s", logFile)
 		}
+	}
+
+	// Register an open-ended session for this long-running daemon. No LOGEND is
+	// needed; EchoLox has no signal-handling lifecycle and such sessions are normal.
+	lbHomeDir := os.Getenv("LBHOMEDIR")
+	if lbHomeDir == "" {
+		lbHomeDir = "/opt/loxberry"
+	}
+	lbLogFile := filepath.Join(logDir, time.Now().Format("20060102_150405.000000")+"_EchoLox.log")
+	initLog := filepath.Join(lbHomeDir, "libs", "bashlib", "initlog.php")
+	cmd := exec.Command(initLog,
+		"--action=logstart",
+		"--package=EchoLox",
+		"--name=EchoLox",
+		"--filename="+lbLogFile,
+		"--append=1",
+		"--message=EchoLox v"+version+" gestartet",
+	)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		logbuf.Global.Info("WARNING: cannot initialize LoxBerry log integration: %v (%s)", err, string(output))
+	} else if err := logbuf.Global.SetLBFile(lbLogFile); err != nil {
+		logbuf.Global.Info("WARNING: cannot open LoxBerry log file %s: %v", lbLogFile, err)
+	} else {
+		lbloglevel.Start()
+		logbuf.Global.Info("LoxBerry log file: %s", lbLogFile)
 	}
 
 	dbPath := filepath.Join(cfg.DataDir, "devices.json")

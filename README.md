@@ -57,6 +57,8 @@ Loxone bleibt die einzige Automations-Zentrale. EchoLox ist ausschliesslich die 
 - [Build & Cross-Compilation](#build--cross-compilation)
 - [Troubleshooting](#troubleshooting)
 - [FAQ](#faq)
+- [Sicherheit](#sicherheit)
+- [Rechtliche Hinweise](#rechtliche-hinweise)
 
 ---
 
@@ -392,6 +394,16 @@ Nach Wiederherstellung EchoLox neu starten (**Einstellungen → Dienst neu start
 ---
 
 ## Logs & Diagnose
+
+### LoxBerry-Log-Level
+
+EchoLox integriert sich in LoxBerry 4s Log-Level-Auswahl im Plugin Manager. Die
+Auswahl steuert eine reduzierte Kopie der Meldungen im zentralen LoxBerry-Browser
+unter **System > Log Files**: Bis „Info“ werden Info-Meldungen übernommen, mit
+„Debug“ zusätzlich Debug-Meldungen, und „Aus“ deaktiviert diese Kopie.
+
+Das eigene detaillierte EchoLox-Log unter `/logs` bleibt davon unabhängig und
+protokolliert weiterhin unverändert alle intern aktivierten Meldungen.
 
 **EchoLox → Logs** (`/echoloxui/logs.html`) — Ring-Buffer mit 2000 Einträgen + optionale Datei (`$LBPLOGDIR/EchoLox.log`).
 
