@@ -49,13 +49,33 @@ echo LBWeb::lbheader('EchoLox', '', '');
 <script>
 (function () {
   var f = document.getElementById('echolox-frame');
+  function bottomChromeHeight() {
+    var tallest = 0;
+    var elements = document.body.querySelectorAll('*');
+    for (var i = 0; i < elements.length; i++) {
+      var el = elements[i];
+      if (el === f || el.contains(f)) continue;
+      var style = window.getComputedStyle(el);
+      if ((style.position !== 'fixed' && style.position !== 'sticky') ||
+          style.display === 'none' || style.visibility === 'hidden') continue;
+      var rect = el.getBoundingClientRect();
+      if (rect.height <= 0 || rect.width <= 0 || rect.height > window.innerHeight / 2) continue;
+      if (Math.abs(rect.bottom - window.innerHeight) <= 6) {
+        tallest = Math.max(tallest, rect.height);
+      }
+    }
+    return tallest;
+  }
   function fit() {
-    f.style.height = (window.innerHeight - f.getBoundingClientRect().top) + 'px';
+    var available = window.innerHeight - f.getBoundingClientRect().top - bottomChromeHeight();
+    f.style.height = Math.max(0, available) + 'px';
   }
   window.addEventListener('resize', fit);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', fit);
   // Run after layout; retry once to catch deferred nav rendering
   setTimeout(fit, 0);
   setTimeout(fit, 250);
+  setTimeout(fit, 1000);
 })();
 </script>
 <?php echo LBWeb::lbfooter(); ?>
