@@ -37,6 +37,9 @@ jobs:
           test -x bin/EchoLox-arm64 || { echo "::error::bin/EchoLox-arm64 fehlt — lokal builden (make all) und committen"; exit 1; }
           test -x bin/EchoLox-armv7  || { echo "::error::bin/EchoLox-armv7 fehlt — lokal builden (make all) und committen"; exit 1; }
           test -x bin/EchoLox-amd64  || { echo "::error::bin/EchoLox-amd64 fehlt — lokal builden (make all) und committen"; exit 1; }
+          file -b bin/EchoLox-arm64 | grep -q "statically linked" || { echo "::error::bin/EchoLox-arm64 ist nicht statisch gelinkt — mit CGO_ENABLED=0 neu bauen"; exit 1; }
+          file -b bin/EchoLox-armv7 | grep -q "statically linked" || { echo "::error::bin/EchoLox-armv7 ist nicht statisch gelinkt — mit CGO_ENABLED=0 neu bauen"; exit 1; }
+          file -b bin/EchoLox-amd64 | grep -q "statically linked" || { echo "::error::bin/EchoLox-amd64 ist nicht statisch gelinkt — mit CGO_ENABLED=0 neu bauen"; exit 1; }
 
       - name: Skip if release already exists
         id: check

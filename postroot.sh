@@ -177,18 +177,38 @@ systemctl enable echolox.service
 systemctl start echolox.service
 echo "<OK> EchoLox service started via systemd"
 
-# ── 9. Icons ──────────────────────────────────────────────────────────────────
-ICONDIR="$LBHOMEDIR/webfrontend/html/system/images/icons/EchoLox"
-mkdir -p "$ICONDIR"
-ICONS_OK=0
-for SIZE in 64 128 256 512; do
-    if [ -f "$LBPBINDIR/icon_${SIZE}.png" ]; then
-        cp "$LBPBINDIR/icon_${SIZE}.png" "$ICONDIR/icon_${SIZE}.png"
-        ICONS_OK=$((ICONS_OK + 1))
+CONFIGURED_PORT=$(awk '
+    /^server:[[:space:]]*(#.*)?$/ { in_server=1; next }
+    in_server && /^[^[:space:]#]/ { exit }
+    in_server && /^[[:space:]]+port:[[:space:]]*[0-9]+[[:space:]]*(#.*)?$/ {
+        line=$0
+        sub(/^[[:space:]]*port:[[:space:]]*/, "", line)
+        sub(/[[:space:]]*(#.*)?$/, "", line)
+        print line
+        exit
+    }
+' "$CFGFILE" 2>/dev/null)
+PORT="${CONFIGURED_PORT:-80}"
+if [ "$PORT" -lt 1 ] 2>/dev/null || [ "$PORT" -gt 65535 ] 2>/dev/null; then
+    PORT=80
+fi
+LISTENING=0
+for _ in $(seq 1 10); do
+    if ss -tln 2>/dev/null | grep -qE ":${PORT}([[:space:]]|$)"; then
+        LISTENING=1
+        break
     fi
+    sleep 0.5
 done
-[ "$ICONS_OK" -gt 0 ] && echo "<OK> EchoLox icons installed ($ICONS_OK sizes)"
+if [ "$LISTENING" -eq 1 ]; then
+    echo "<OK> EchoLox listening on port $PORT"
+else
+    echo "<WARN> EchoLox: service started but port $PORT is not listening"
+    systemctl status echolox.service --no-pager -l 2>&1 | head -n 15 | sed 's/^/<INFO> systemctl: /' || true
+    journalctl -u echolox.service -n 20 --no-pager 2>&1 | sed 's/^/<INFO> journalctl: /' || true
+fi
 
+# ── 9. Reverse-proxy helper ──────────────────────────────────────────────────
 # Install the opt-in reverse-proxy helper on every install/update.
 cp "$SCRIPT_DIR/scripts/reverse-proxy-setup.sh" "$LBPBINDIR/reverse-proxy-setup.sh"
 chmod +x "$LBPBINDIR/reverse-proxy-setup.sh"

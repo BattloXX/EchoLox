@@ -39,7 +39,4 @@ if [ -f "$DEVICES_JSON" ]; then
     echo "<OK> EchoLox devices backed up to $BACKUP_PATH"
 fi
 
-# Ensure icon destination exists for the installer
-mkdir -p "${LBHOMEDIR:-/opt/loxberry}/webfrontend/html/system/images/icons/EchoLox" 2>/dev/null
-
 exit 0

@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -39,6 +40,22 @@ func Run(cfg *Config, cfgPath string, version string) error {
 		}
 	}
 
+	addr := fmt.Sprintf(":%d", cfg.Server.Port)
+	ln, err := net.Listen("tcp4", addr)
+	if err != nil {
+		return err
+	}
+	defer ln.Close()
+	logbuf.Global.Info("EchoLox HTTP server listening on IPv4 %s", addr)
+
+	ln6, err := net.Listen("tcp6", addr)
+	if err != nil {
+		logbuf.Global.Info("WARNING: optional IPv6 HTTP listener unavailable on %s: %v", addr, err)
+	} else {
+		defer ln6.Close()
+		logbuf.Global.Info("EchoLox HTTP server listening on IPv6 %s", addr)
+	}
+
 	// Register an open-ended session for this long-running daemon. No LOGEND is
 	// needed; EchoLox has no signal-handling lifecycle and such sessions are normal.
 	lbHomeDir := os.Getenv("LBHOMEDIR")
@@ -47,22 +64,16 @@ func Run(cfg *Config, cfgPath string, version string) error {
 	}
 	lbLogFile := filepath.Join(logDir, time.Now().Format("20060102_150405.000000")+"_EchoLox.log")
 	initLog := filepath.Join(lbHomeDir, "libs", "bashlib", "initlog.php")
-	cmd := exec.Command(initLog,
-		"--action=logstart",
-		"--package=EchoLox",
-		"--name=EchoLox",
-		"--filename="+lbLogFile,
-		"--append=1",
-		"--message=EchoLox v"+version+" gestartet",
-	)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		logbuf.Global.Info("WARNING: cannot initialize LoxBerry log integration: %v (%s)", err, string(output))
-	} else if err := logbuf.Global.SetLBFile(lbLogFile); err != nil {
-		logbuf.Global.Info("WARNING: cannot open LoxBerry log file %s: %v", lbLogFile, err)
-	} else {
-		lbloglevel.Start()
-		logbuf.Global.Info("LoxBerry log file: %s", lbLogFile)
-	}
+	go func() {
+		if err := initLoxBerryLog(initLog, lbLogFile, version, 5*time.Second); err != nil {
+			logbuf.Global.Info("WARNING: cannot initialize LoxBerry log integration: %v", err)
+		} else if err := logbuf.Global.SetLBFile(lbLogFile); err != nil {
+			logbuf.Global.Info("WARNING: cannot open LoxBerry log file %s: %v", lbLogFile, err)
+		} else {
+			lbloglevel.Start()
+			logbuf.Global.Info("LoxBerry log file: %s", lbLogFile)
+		}
+	}()
 
 	dbPath := filepath.Join(cfg.DataDir, "devices.json")
 	mgr, err := device.NewManager(dbPath)
@@ -135,20 +146,7 @@ func Run(cfg *Config, cfgPath string, version string) error {
 
 	go upnpListener.Listen()
 
-	addr := fmt.Sprintf(":%d", cfg.Server.Port)
-	ln, err := net.Listen("tcp4", addr)
-	if err != nil {
-		return err
-	}
-	defer ln.Close()
-	logbuf.Global.Info("EchoLox HTTP server listening on IPv4 %s", addr)
-
-	ln6, err := net.Listen("tcp6", addr)
-	if err != nil {
-		logbuf.Global.Info("WARNING: optional IPv6 HTTP listener unavailable on %s: %v", addr, err)
-	} else {
-		defer ln6.Close()
-		logbuf.Global.Info("EchoLox HTTP server listening on IPv6 %s", addr)
+	if ln6 != nil {
 		go func() {
 			if err := http.Serve(ln6, logRequests(mux)); err != nil && !errors.Is(err, net.ErrClosed) {
 				logbuf.Global.Info("WARNING: IPv6 HTTP server stopped: %v", err)
@@ -156,6 +154,26 @@ func Run(cfg *Config, cfgPath string, version string) error {
 		}()
 	}
 	return http.Serve(ln, logRequests(mux))
+}
+
+func initLoxBerryLog(initLog, lbLogFile, version string, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, initLog,
+		"--action=logstart",
+		"--package=EchoLox",
+		"--name=EchoLox",
+		"--filename="+lbLogFile,
+		"--append=1",
+		"--message=EchoLox v"+version+" gestartet",
+	)
+	cmd.WaitDelay = time.Second
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w (%s)", err, string(output))
+	}
+	return nil
 }
 
 func logRequests(next http.Handler) http.Handler {
