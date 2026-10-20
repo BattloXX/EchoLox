@@ -253,7 +253,7 @@ func (h *Handler) handleMiniservers(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleVerify(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if err := h.verifier.RefreshCache(); err != nil {
-		http.Error(w, err.Error(), 500)
+		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, map[string]string{"status": "ok"})

@@ -194,6 +194,8 @@ Erwartete Antwort: XML mit `Philips hue bridge 2015`.
 
 ## Erste Schritte
 
+Die integrierte **Hilfe** (`/echoloxui/help.html`) führt am Beispiel Küchenlicht durch die Einrichtung. Direkt in den Formularen werden Schaltmodi, Zielwerte und die nächsten Prüfschritte erklärt.
+
 ### 1. Miniserver-Verbindung prüfen
 
 **EchoLox → Einstellungen** (`/echoloxui/settings.html`) öffnen.
@@ -210,20 +212,30 @@ Erwartete Antwort: XML mit `Philips hue bridge 2015`.
 - **Typ:** `Dimmer`
 - **Transport:** `HTTP`
 
-Generierte Virtual Input Namen (werden sofort angezeigt):
-- `echolox_wohnzimmer_licht_on`
-- `echolox_wohnzimmer_licht_off`
-- `echolox_wohnzimmer_licht_brightness`
+Im Schaltmodus **Ein/Aus** werden diese Ziele vorgeschlagen:
+- `echolox_wohnzimmer_licht` (1 = ein, 0 = aus)
+- `echolox_wohnzimmer_licht_brightness` (0–100)
 
-### 3. Virtual Inputs in Loxone Config anlegen
+Die Zielnamen sind bearbeitbar. Für einen bestehenden Eingang `echolox_licht_kueche`
+kann das Alexa-Gerät beispielsweise „Küchenlicht“ heißen; trage bei **on** den
+exakten vorhandenen Eingangsnamen ein. EchoLox legt keine Eingänge im Miniserver an.
 
-Namen exakt wie oben:
+### 3. Virtuelle Eingänge in Loxone Config anlegen
 
-| Virtual Input Name | Typ | Wert |
-|---|---|---|
-| `echolox_wohnzimmer_licht_on` | Virtual Input | 0/1 |
-| `echolox_wohnzimmer_licht_off` | Virtual Input | 0/1 |
-| `echolox_wohnzimmer_licht_brightness` | Virtual Input | 0–100 |
+Unter **Peripherie → Virtuelle Eingänge** normale **Virtuelle Eingänge** anlegen,
+exakt wie die Zielnamen in EchoLox. Den Schalteingang mit der gewünschten Logik
+verbinden, z.B. mit einem Ein/Aus-Eingang für dauerhafte Werte 1/0.
+Für Helligkeit einen analogen Eingang mit Wertebereich 0–100 verwenden.
+Anschließend das Programm **auf den Miniserver übertragen**.
+
+Bei **Impuls** werden stattdessen zwei Schalteingänge mit `_on` und `_off`
+verwendet; diese mit den jeweiligen Impulseingängen der Logik verbinden.
+
+**Discovery:** Der Scan liest `LoxAPP3.json`, also die App-Bedienelemente.
+Daher erscheinen auch Schalter und Dimmer, während virtuelle Eingänge ohne
+App-Eintrag fehlen können. Unter **Discovery → Virtuellen Eingang prüfen**
+kannst du einen bekannten Namen direkt und ohne Schaltbefehl prüfen und danach
+als Gerät anlegen. Eine manuelle Zuordnung funktioniert unabhängig vom Scan.
 
 ### 4. Alexa: Neue Geräte suchen
 
@@ -242,7 +254,7 @@ Namen exakt wie oben:
 | `color` | Ein/Aus, Helligkeit, Farbe | `{name}_on`, `{name}_off`, `{name}_brightness`, `{name}_hue`, `{name}_saturation` |
 | `scene` | "Aktiviere …" | `{name}_activate` |
 
-> Alle Namen haben automatisch das Prefix `echolox_`.
+> Die Tabelle zeigt den Modus **Impuls**. Bei **Ein/Aus** ersetzt ein einzelner Eingang `{name}` die beiden Eingänge `{name}_on`/`{name}_off`. Vorschläge haben das Prefix `echolox_`; eigene Zielnamen sind möglich.
 
 ### Namensnormalisierung
 
@@ -258,13 +270,20 @@ Regeln: Kleinbuchstaben, Umlaute → ae/oe/ue/ss, Sonderzeichen → Unterstrich.
 
 ## Virtual Inputs in Loxone einrichten
 
-### HTTP Virtual Input
+### Virtueller Eingang über HTTP-Webservice
 
-Loxone Config → **Peripherie → Virtual Inputs → Virtual HTTP Input**:
+Für HTTP wird ein normaler **Virtueller Eingang** benötigt. EchoLox sendet
+`/dev/sps/io/{name}/{value}` an den Miniserver. Im virtuellen Eingang werden
+keine HTTP-Methode oder URL konfiguriert.
 
-1. Name: exakt wie von EchoLox generiert
-2. HTTP-Methode: `GET`
-3. URL-Pfad: `/dev/sps/io/{name}/{value}`
+Ein **Virtueller HTTP Eingang** fragt dagegen externe Webseiten ab und ist für
+diesen Steuerweg ungeeignet. Siehe [Loxone Webservices](https://www.loxone.com/dede/kb/webservices/)
+und [Virtueller HTTP Eingang](https://www.loxone.com/dede/kb/virtueller-http-eingang/).
+
+Für `echolox_licht_kueche`: EchoLox-Gerät als **Schalter**, **HTTP**, **Ein/Aus**
+anlegen und bei **on** exakt `echolox_licht_kueche` eintragen. Der Gerätetest
+sendet einen Wert und kann die angeschlossene Beleuchtung einschalten;
+die Namensprüfung in Discovery liest nur den Status.
 
 ### UDP Virtual Input
 

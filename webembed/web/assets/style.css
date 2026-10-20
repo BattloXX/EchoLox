@@ -32,3 +32,16 @@ table{width:100%;border-collapse:collapse;background:var(--surface-container-low
 .bg-primary-container{background:var(--primary-container)}.bg-surface-container-lowest{background:var(--surface-container-lowest)}.text-on-surface{color:var(--on-surface)}.text-on-surface-variant{color:var(--on-surface-variant)}.rounded{border-radius:var(--radius)}.rounded-lg{border-radius:var(--radius-lg)}.rounded-xl{border-radius:var(--radius-xl)}.rounded-full{border-radius:var(--radius-full)}.p-4{padding:1rem}.p-8{padding:2rem}.flex{display:flex}.items-center{align-items:center}.justify-between{justify-content:space-between}.gap-2{gap:.5rem}.gap-4{gap:1rem}
 @media(min-width:768px){.md\:flex{display:flex}.md\:hidden{display:none}}
 @media(max-width:767px){body{padding:0 0 82px}.container{padding:1.25rem 1rem}h1{font-size:24px}.card{padding:1.25rem;margin-bottom:1rem}.header-row{margin-bottom:1rem}.filter-row input,#deviceSearch{margin-left:0;min-width:100%}table{display:block;overflow-x:auto;white-space:nowrap}.form-actions>.btn{flex:1}.info-grid{grid-template-columns:1fr}.upload-area{padding:2rem 1rem}.backup-item{align-items:flex-start;flex-direction:column}}
+
+/* Inline guidance stays with the related task and wraps on small screens. */
+.setup-guide summary,.advanced-settings summary,.card details summary,.card>summary{cursor:pointer;font-weight:600;line-height:1.5}
+.setup-steps{padding-left:1.4rem;line-height:1.65}.setup-steps li{margin:.75rem 0}
+.field-hint{display:block;color:var(--on-surface-variant);font-size:14px;line-height:1.55;margin:.5rem 0}
+.advanced-settings{margin:1.25rem 0}.advanced-settings[open]>summary{margin-bottom:1rem}
+.help-definitions dt{font-weight:600;margin-top:1rem}.help-definitions dd{margin:.35rem 0 1rem;line-height:1.6}
+.card details{margin:1rem 0}.card details p{margin:.75rem 0;line-height:1.6}
+.vi-preview label{display:block;margin-bottom:.85rem}.vi-preview input{display:block;width:100%;margin-top:.35rem;min-width:0}
+.vi-preview small{display:block;font-family:var(--font-sans);margin-top:.3rem;font-weight:400}
+.empty-state{text-align:center;padding:1.5rem;line-height:1.65}.empty-state a{display:inline-block;margin:.5rem}
+
+.desktop-nav{min-width:0;overflow-x:auto}.topbar>.brand,.header-actions{flex-shrink:0}

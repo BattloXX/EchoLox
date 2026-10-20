@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -77,7 +78,7 @@ func TestCheckVI_ProbeFallback(t *testing.T) {
 	body := buildLoxAPP3(map[string]loxControl{})
 	probed := map[string]bool{}
 	jdevHandler := func(w http.ResponseWriter, r *http.Request) {
-		name := r.URL.Path[len("/jdev/sps/io/"):]
+		name := strings.TrimSuffix(r.URL.Path[len("/jdev/sps/io/"):], "/state")
 		probed[name] = true
 		code := "404"
 		if name == "echolox_exists" {
@@ -111,5 +112,16 @@ func TestCheckVI_ProbeResultCached(t *testing.T) {
 	v.CheckVI("echolox_test")
 	if callCount != 1 {
 		t.Errorf("expected probe to be called once (cached), got %d", callCount)
+	}
+}
+
+func TestProbeVIReportsAccessDenied(t *testing.T) {
+	for _, body := range []string{`{"LL":{"Code":"401"}}`, `{"LL":{"Code":403}}`} {
+		v, _ := testVerifier(t, buildLoxAPP3(map[string]loxControl{}), func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(body))
+		})
+		if got := v.ProbeVI("echolox_licht_kueche"); got != StatusAccessDenied {
+			t.Fatalf("ProbeVI = %s, want access_denied", got)
+		}
 	}
 }

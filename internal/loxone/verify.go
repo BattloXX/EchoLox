@@ -32,12 +32,12 @@ type loxControl struct {
 }
 
 type Verifier struct {
-	client    *Client
-	http      *http.Client
-	mu        sync.Mutex
-	cachedVIs map[string]bool     // name → exists (from LoxAPP3.json, recursive)
+	client     *Client
+	http       *http.Client
+	mu         sync.Mutex
+	cachedVIs  map[string]bool        // name → exists (from LoxAPP3.json, recursive)
 	probeCache map[string]probeResult // per-VI probe results (short TTL)
-	lastFetch time.Time
+	lastFetch  time.Time
 }
 
 type probeResult struct {
@@ -174,7 +174,7 @@ func (v *Verifier) probeVI(name string) VIStatus {
 }
 
 func (v *Verifier) doProbe(name string) VIStatus {
-	probeURL := v.client.BaseURL() + "/jdev/sps/io/" + url.PathEscape(name)
+	probeURL := v.client.BaseURL() + "/jdev/sps/io/" + url.PathEscape(name) + "/state"
 	req, err := http.NewRequest("GET", probeURL, nil)
 	if err != nil {
 		return StatusNotFound
@@ -186,21 +186,32 @@ func (v *Verifier) doProbe(name string) VIStatus {
 		return StatusNotFound
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode == 401 {
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
 		return StatusAccessDenied
+	}
+	if resp.StatusCode != http.StatusOK {
+		return StatusNotFound
 	}
 	// Loxone returns HTTP 200 for both found and not-found cases;
 	// the result code lives inside the JSON body.
-	var ll struct {
-		LL struct {
-			Code string `json:"Code"`
-		} `json:"LL"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&ll); err != nil {
+	code, err := responseCode(resp.Body)
+	if err != nil {
 		return StatusNotFound
 	}
-	if ll.LL.Code == "200" {
+	if code == "401" || code == "403" {
+		return StatusAccessDenied
+	}
+	if code == "200" {
 		return StatusOK
 	}
 	return StatusNotFound
+}
+
+// ProbeVI reads an explicit target without relying on the app structure file.
+// It sends no switching command.
+func (v *Verifier) ProbeVI(name string) VIStatus {
+	if v.client == nil || strings.TrimSpace(name) == "" {
+		return StatusNotFound
+	}
+	return v.doProbe(name)
 }

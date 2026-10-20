@@ -1,5 +1,5 @@
 BINARY=EchoLox
-VERSION=0.3.3-rc2
+VERSION=0.3.3-rc4
 LDFLAGS=-ldflags="-s -w -X main.version=$(VERSION)"
 
 .PHONY: all arm64 armv7 amd64 zip clean tidy

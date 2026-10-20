@@ -335,8 +335,10 @@ func (m *Manager) Update(d *Device) error {
 			d.LastSent = old.LastSent
 		}
 	}
-	// Always regenerate VIs to stay in sync with name/type/switchMode changes
-	d.VirtualInputs = GenerateVirtualInputs(d.Name, d.Type, d.SwitchMode)
+	// Explicit targets (including discovery imports) survive edits.
+	if len(d.VirtualInputs) == 0 {
+		d.VirtualInputs = GenerateVirtualInputs(d.Name, d.Type, d.SwitchMode)
+	}
 	m.byID[d.ID] = d
 	m.byHueID[d.HueID] = d
 	return m.persist()

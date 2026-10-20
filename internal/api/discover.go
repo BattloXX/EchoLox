@@ -33,6 +33,11 @@ func (h *Handler) handleDiscoverLoxone(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 503, fmt.Errorf("kein Miniserver konfiguriert — bitte in Einstellungen prüfen"))
 		return
 	}
+	if name := strings.TrimSpace(r.URL.Query().Get("name")); name != "" {
+		status := loxone.NewVerifier(h.lox).ProbeVI(name)
+		writeJSON(w, map[string]string{"name": name, "status": string(status)})
+		return
+	}
 
 	proposals, err := loxone.FetchVIProposals(h.lox)
 	if err != nil {

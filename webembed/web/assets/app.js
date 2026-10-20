@@ -1,5 +1,26 @@
 const API = '/echolox/api';
 
+const deviceTypeLabels = {switch: 'Schalter', dimmer: 'Dimmer', color: 'Farblicht', scene: 'Szene'};
+const inputStatusLabels = {ok: 'Erreichbar', not_found: 'Nicht gefunden', access_denied: 'Zugriff verweigert', not_sent: 'Noch nicht gesendet'};
+const inputStatusHelp = {
+  ok: 'Ziel gefunden. Die Reaktion der Logik kannst du mit einem Schaltbefehl prüfen.',
+  not_found: 'Zielname und gewählten Miniserver prüfen; Loxone-Programm übertragen.',
+  access_denied: 'Zugangsdaten und Benutzerberechtigungen in LoxBerry prüfen.',
+  not_sent: 'Noch kein erfolgreicher Versand gespeichert. Den Namen kannst du unter Discovery prüfen.',
+};
+
+function showNotice(id, message, kind = 'error') {
+  const el = document.getElementById(id);
+  if (el) { el.className = 'test-result ' + kind; el.textContent = message; }
+}
+
+function commandTestMessage(data) {
+  if (data.status === 'ok') return 'Der Miniserver hat die Testwerte angenommen. Prüfe jetzt, ob das Licht oder die gewünschte Funktion reagiert.';
+  if (data.status === 'no loxone client') return 'Kein Miniserver verbunden. Unter Einstellungen den Miniserver auswählen, speichern und EchoLox neu starten.';
+  const details = Object.entries(data.errors || {}).map(([target, error]) => `${target}: ${error}`).join('; ');
+  return 'Der Test konnte nicht vollständig gesendet werden. ' + (details || data.error || 'Verbindung und Zielnamen prüfen.');
+}
+
 // ── Alexa Reset-Hint ───────────────────────────────────────────────────────────
 
 function restartFromHeader() {
@@ -22,11 +43,11 @@ async function triggerAlexaReset() {
       btn.innerHTML = `${syncIcon} Erneut senden`;
     } else {
       resultEl.innerHTML = `<span style="color:#c00">Fehler: ${escapeHtml(data.error || 'Unbekannt')}</span>`;
-      btn.innerHTML = `${syncIcon} Alexa sauber neu verbinden (SSDP-Burst senden)`;
+      btn.innerHTML = `${syncIcon} Bridge für Alexa erneut bekannt machen`;
     }
   } catch(e) {
     resultEl.innerHTML = `<span style="color:#c00">Verbindungsfehler: ${escapeHtml(e.message)}</span>`;
-    btn.innerHTML = `${syncIcon} Alexa sauber neu verbinden (SSDP-Burst senden)`;
+    btn.innerHTML = `${syncIcon} Bridge für Alexa erneut bekannt machen`;
   } finally {
     btn.disabled = false;
   }
@@ -66,9 +87,19 @@ let allDevices = [];
 let deviceSort = { col: null, dir: 1 };
 
 async function loadDevices() {
-  const res = await fetch(`${API}/devices`);
-  allDevices = await res.json() || [];
-  renderDevices();
+  try {
+    const res = await fetch(`${API}/devices`);
+    if (!res.ok) throw new Error('Geräteliste konnte nicht geladen werden.');
+    allDevices = await res.json() || [];
+    renderDevices();
+    const guide = document.getElementById('setupGuide');
+    if (guide && !allDevices.length) guide.open = true;
+    if (new URLSearchParams(window.location.search).has('saved')) {
+      showNotice('deviceNotice', 'Gerät gespeichert. Mit „Schaltbefehl testen“ kannst du jetzt Testwerte senden. Prüfe danach, ob die gewünschte Funktion reagiert.', 'ok');
+    }
+  } catch (err) {
+    showNotice('deviceNotice', err.message + ' Seite neu laden oder den EchoLox-Dienst prüfen.');
+  }
 }
 
 function sortDevices(col) {
@@ -110,6 +141,13 @@ function renderDevices() {
     });
   }
 
+  if (!filtered.length) {
+    tbody.innerHTML = allDevices.length
+      ? '<tr><td colspan="6" class="empty-state">Keine Geräte passen zur Suche. Versuche einen anderen Namen oder leere das Suchfeld.</td></tr>'
+      : '<tr><td colspan="6" class="empty-state">Noch kein Gerät angelegt. Beginne mit einem vorhandenen virtuellen Eingang.<br><a href="device.html">Erstes Gerät anlegen</a><a href="discover.html">Vorhandenen Eingang prüfen</a></td></tr>';
+    return;
+  }
+
   filtered.forEach(d => {
     const vis = Object.entries(d.virtual_inputs || {})
       .map(([k,v]) => `<span style="font-family:monospace;font-size:0.85em">${v}</span>`)
@@ -118,14 +156,14 @@ function renderDevices() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${d.name}</td>
-      <td><span class="type-badge">${d.type}</span></td>
+      <td><span class="type-badge">${deviceTypeLabels[d.type] || escapeHtml(d.type)}</span></td>
       <td>${d.type !== 'scene' ? modeLabel : '—'}</td>
       <td>${d.transport || 'http'}</td>
       <td>${vis}</td>
       <td>
         <a href="device.html?id=${d.id}" class="btn action-btn">Bearbeiten</a>
         <button onclick="deleteDevice('${d.id}')" class="btn action-btn">Löschen</button>
-        <button onclick="testDevice('${d.id}')" class="btn action-btn">Testen</button>
+        <button onclick="testDevice('${d.id}')" class="btn action-btn">Schaltbefehl testen</button>
       </td>`;
     tbody.appendChild(tr);
   });
@@ -138,9 +176,14 @@ async function deleteDevice(id) {
 }
 
 async function testDevice(id) {
-  const res = await fetch(`${API}/devices/${id}/test`, { method: 'POST' });
-  const data = await res.json();
-  alert(data.status === 'ok' ? 'Test erfolgreich!' : 'Fehler: ' + JSON.stringify(data.errors));
+  showNotice('deviceNotice', 'Testwerte werden an die gespeicherten Ziele gesendet. Angeschlossene Geräte können reagieren.', 'info');
+  try {
+    const res = await fetch(`${API}/devices/${id}/test`, { method: 'POST' });
+    const data = await res.json();
+    showNotice('deviceNotice', commandTestMessage(data), res.ok && data.status === 'ok' ? 'ok' : 'error');
+  } catch (err) {
+    showNotice('deviceNotice', 'Test nicht abgeschlossen: ' + err.message + '. Verbindung zu EchoLox prüfen.');
+  }
 }
 
 // ── Device Form ────────────────────────────────────────────────────────────
@@ -153,6 +196,13 @@ function initDeviceForm() {
   const nameEl = document.getElementById('name');
   const typeEl = document.getElementById('type');
   const transportEl = document.getElementById('transport');
+  // Sending uses the connection configured in Settings, shared by all devices.
+  transportEl.disabled = true;
+  fetch(`${API}/settings`).then(r => {
+    if (!r.ok) throw new Error('Einstellungen nicht lesbar');
+    return r.json();
+  }).then(cfg => { transportEl.value = cfg.transport || 'http'; })
+    .catch(() => showNotice('msTestResult', 'Die aktive Übertragungsart konnte nicht geladen werden. Einstellungen prüfen.'));
   const switchModeEl = document.getElementById('switchMode');
   const switchModeGroup = document.getElementById('switchModeGroup');
   const switchModeHint = document.getElementById('switchModeHint');
@@ -163,31 +213,43 @@ function initDeviceForm() {
     switchModeGroup.style.display = type === 'scene' ? 'none' : '';
     if (switchModeEl && switchModeHint) {
       switchModeHint.textContent = switchModeEl.value === 'impulse'
-        ? 'Impuls: "_on"-VI bekommt "Impuls" (Ein), "_off"-VI bekommt "Impuls" (Aus).'
-        : 'Ein/Aus: ein einziger VI — bekommt 1 (Ein) oder 0 (Aus).';
+        ? 'Zwei getrennte Eingänge: Ein erhält beim Einschalten einen kurzen Impuls, Aus beim Ausschalten.'
+        : 'Ein gemeinsamer Eingang: 1 schaltet ein, 0 schaltet aus. Für Logik mit dauerhaftem Ein/Aus-Zustand.';
     }
   }
 
+  let customTargets = null;
   function updatePreview() {
-    const name = nameEl.value;
     const type = typeEl.value;
-    const switchMode = switchModeEl ? switchModeEl.value : 'onoff';
+    const mode = switchModeEl ? switchModeEl.value : 'onoff';
     const preview = document.getElementById('viPreview');
-    if (!name) { preview.innerHTML = '<em>Bitte Name eingeben</em>'; return; }
-    const vis = generateVIs(name, type, switchMode);
-    const impulse = switchMode === 'impulse';
-    preview.innerHTML = vis.map(v => {
-      if (impulse) {
-        const hint = v.endsWith('_on') ? ' <em style="color:#888;font-size:0.85em">→ Impuls bei Ein</em>'
-                   : v.endsWith('_off') ? ' <em style="color:#888;font-size:0.85em">→ Impuls bei Aus</em>'
-                   : '';
-        return `<div>${v}${hint}</div>`;
-      } else {
-        const hint = (type !== 'scene' && !v.includes('_brightness') && !v.includes('_hue') && !v.includes('_saturation'))
-          ? ' <em style="color:#888;font-size:0.85em">→ 1 / 0</em>' : '';
-        return `<div>${v}${hint}</div>`;
-      }
-    }).join('');
+    preview.replaceChildren();
+    if (!nameEl.value) { preview.textContent = 'Bitte Name eingeben'; return; }
+    const names = generateVIs(nameEl.value, type, mode);
+    const roles = type === 'scene' ? ['activate'] :
+      [...(mode === 'impulse' ? ['on', 'off'] : ['on']),
+       ...(type !== 'switch' ? ['brightness'] : []),
+       ...(type === 'color' ? ['hue', 'saturation'] : [])];
+    roles.forEach((role, i) => {
+      const label = document.createElement('label');
+      const labels = {on: mode === 'impulse' ? 'Einschalten' : 'Ein und Aus', off: 'Ausschalten', brightness: 'Helligkeit', hue: 'Farbton', saturation: 'Farbsättigung', activate: 'Szene aktivieren'};
+      const hints = {on: mode === 'impulse' ? 'Sendet einen kurzen Impuls.' : 'Sendet 1 für Ein und 0 für Aus.', off: 'Sendet einen kurzen Impuls.', brightness: 'Sendet einen Wert von 0 bis 100.', hue: 'Sendet einen Wert von 0 bis 360.', saturation: 'Sendet einen Wert von 0 bis 100.', activate: 'Sendet 1 zum Auslösen.'};
+      label.textContent = labels[role] + ': ';
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.required = true;
+      input.dataset.viRole = role;
+      input.value = customTargets?.[role] || names[i];
+      input.addEventListener('input', () => {
+        customTargets = Object.fromEntries([...preview.querySelectorAll('input')]
+          .map(el => [el.dataset.viRole, el.value]));
+      });
+      label.appendChild(input);
+      const hint = document.createElement('small');
+      hint.textContent = hints[role];
+      label.appendChild(hint);
+      preview.appendChild(label);
+    });
   }
 
   nameEl.addEventListener('input', updatePreview);
@@ -201,19 +263,29 @@ function initDeviceForm() {
     document.getElementById('pageTitle').textContent = 'Gerät bearbeiten';
     const testBtn = document.getElementById('testDeviceBtn');
     if (testBtn) testBtn.style.display = '';
+    const saveHint = document.getElementById('saveBeforeTest');
+    if (saveHint) saveHint.textContent = 'Der Schaltbefehl verwendet die gespeicherten Ziele. Änderungen im Formular zuerst speichern.';
     fetch(`${API}/devices/${id}`).then(r => r.json()).then(d => {
+      customTargets = d.virtual_inputs || null;
       nameEl.value = d.name;
       typeEl.value = d.type;
-      transportEl.value = d.transport || 'http';
       if (switchModeEl) switchModeEl.value = d.switch_mode || 'onoff';
       updateSwitchModeVisibility();
       updatePreview();
-    });
+    }).catch(err => showNotice('msTestResult', 'Gerät konnte nicht geladen werden: ' + err.message));
+  }
+
+  if (!id && params.get('vi')) {
+    nameEl.value = params.get('name') || params.get('vi');
+    customTargets = {on: params.get('vi')};
+    updatePreview();
   }
 
   document.getElementById('deviceForm').addEventListener('submit', async e => {
     e.preventDefault();
     const body = {
+      virtual_inputs: Object.fromEntries([...document.querySelectorAll('#viPreview input')]
+        .map(el => [el.dataset.viRole, el.value.trim()])),
       name: nameEl.value,
       type: typeEl.value,
       transport: transportEl.value,
@@ -241,7 +313,7 @@ function initDeviceForm() {
       result.textContent = '✗ ' + msg;
       return;
     }
-    window.location.href = 'index.html';
+    window.location.href = 'index.html?saved=1';
   });
 }
 
@@ -254,7 +326,7 @@ async function testMiniserver() {
     const data = await res.json();
     if (data.status === 'ok') {
       result.className = 'test-result ok';
-      result.textContent = '✓ Miniserver erreichbar';
+      result.textContent = '✓ Verbindung zum Miniserver hergestellt. Prüfe als Nächstes den Eingangsnamen unter Discovery. Diese Prüfung sendet keinen Schaltbefehl.';
     } else {
       result.className = 'test-result error';
       result.textContent = '✗ ' + (data.error || 'Verbindung fehlgeschlagen');
@@ -275,10 +347,10 @@ async function testCurrentDevice() {
     const data = await res.json();
     if (data.status === 'ok') {
       result.className = 'test-result ok';
-      result.textContent = '✓ Gerät erfolgreich getestet';
+      result.textContent = commandTestMessage(data);
     } else {
       result.className = 'test-result error';
-      result.textContent = '✗ Fehler: ' + JSON.stringify(data.errors || data);
+      result.textContent = commandTestMessage(data);
     }
   } catch(e) {
     result.className = 'test-result error';
@@ -319,20 +391,34 @@ function sortStatusBy(col) {
 }
 
 async function loadStatus() {
-  const res = await fetch(`${API}/status`);
-  allRows = await res.json() || [];
-  renderStatus();
+  try {
+    const res = await fetch(`${API}/status`);
+    if (!res.ok) throw new Error('Status konnte nicht geladen werden.');
+    allRows = await res.json() || [];
+    renderStatus();
+    return true;
+  } catch (err) {
+    showNotice('statusNotice', err.message + ' Verbindung zu EchoLox prüfen und erneut aktualisieren.');
+    return false;
+  }
 }
 
 async function refreshStatus() {
-  await fetch(`${API}/status`, { method: 'POST' });
-  await loadStatus();
+  showNotice('statusNotice', 'Eingänge werden geprüft. Es wird kein Schaltbefehl gesendet.', 'info');
+  try {
+    const res = await fetch(`${API}/status`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Aktualisierung fehlgeschlagen');
+    if (await loadStatus()) showNotice('statusNotice', 'Status aktualisiert.', 'ok');
+  } catch (err) {
+    showNotice('statusNotice', 'Status nicht aktualisiert: ' + err.message + '. Miniserver-Verbindung unter Einstellungen prüfen.');
+  }
 }
 
 function filterStatus(filter) {
   currentFilter = filter;
   document.querySelectorAll('.filter-row .btn').forEach(b => b.classList.remove('active'));
-  const filterButtonIds = { all: 'f-all', ok: 'f-ok', not_found: 'f-nf', not_sent: 'f-ns' };
+  const filterButtonIds = { all: 'f-all', ok: 'f-ok', not_found: 'f-nf', access_denied: 'f-ad', not_sent: 'f-ns' };
   const el = document.getElementById(filterButtonIds[filter]);
   if (el) el.classList.add('active');
   renderStatus();
@@ -366,13 +452,20 @@ function renderStatus() {
     });
   }
 
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">' + (allRows.length
+      ? 'Keine Eingänge passen zu diesem Filter. Wähle „Alle“ oder ändere die Suche.'
+      : 'Noch keine Ziele vorhanden. <a href="device.html">Lege zuerst ein Gerät an.</a>') + '</td></tr>';
+    return;
+  }
+
   rows.forEach(r => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><span class="status-${r.status}"><span class="status-dot" aria-hidden="true"></span>${r.status}</span></td>
+      <td><span class="status-${r.status}"><span class="status-dot" aria-hidden="true"></span>${inputStatusLabels[r.status] || escapeHtml(r.status)}</span><small class="field-hint">${inputStatusHelp[r.status] || ''}</small></td>
       <td style="font-family:monospace">${r.name}</td>
       <td>${r.device_name}</td>
-      <td>${r.last_value || '—'}</td>
+      <td>${r.last_value ?? '—'}</td>
       <td>${r.last_sent || 'nie'}</td>`;
     tbody.appendChild(tr);
   });
@@ -386,8 +479,14 @@ async function loadSettings() {
   if (exEl) exEl.textContent = randomHex12();
 
   // Load miniserver list from LoxBerry
-  const msRes = await fetch(`${API}/miniservers`);
-  const miniservers = await msRes.json() || [];
+  let miniservers = [];
+  try {
+    const msRes = await fetch(`${API}/miniservers`);
+    if (!msRes.ok) throw new Error('Miniserver-Liste nicht lesbar');
+    miniservers = await msRes.json() || [];
+  } catch (err) {
+    showNotice('testResult', err.message + '. Verbindung zu EchoLox prüfen und die Seite neu laden.');
+  }
   const sel = document.getElementById('miniserver');
   if (sel) {
     sel.innerHTML = miniservers.length
@@ -426,7 +525,7 @@ async function loadSettings() {
       const mu = document.getElementById('mqttUsername');
       if (mu && cfg.mqtt_username) mu.value = cfg.mqtt_username;
     }
-  } catch(_) {}
+  } catch(err) { showNotice('testResult', 'Einstellungen konnten nicht geladen werden. Bitte die Seite neu laden, bevor du Änderungen speicherst.'); }
 
   // Settings form submit
   const form = document.getElementById('settingsForm');
@@ -451,15 +550,17 @@ async function loadSettings() {
         mqtt_username:  document.getElementById('mqttUsername')?.value || '',
         mqtt_password:  pwEl ? pwEl.value : undefined,
       };
-      const res = await fetch(`${API}/settings`, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
       const notice = document.getElementById('saveNotice');
-      if (notice) notice.textContent = data.message || (res.ok ? '✓ Gespeichert' : '✗ Fehler');
-      setTimeout(() => { if (notice) notice.textContent = ''; }, 4000);
+      try {
+        const res = await fetch(`${API}/settings`, {
+          method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Einstellungen konnten nicht gespeichert werden');
+        if (notice) notice.textContent = '✓ Gespeichert. Starte EchoLox neu, um die Änderungen zu übernehmen. Danach die gespeicherte Verbindung prüfen.';
+      } catch (err) {
+        if (notice) notice.textContent = '✗ ' + err.message + '. Verbindung zu EchoLox prüfen und erneut speichern.';
+      }
     });
   }
 }
@@ -522,7 +623,7 @@ async function testConnection() {
     const data = await res.json();
     if (data.status === 'ok') {
       result.className = 'test-result ok';
-      result.textContent = '✓ Miniserver erreichbar';
+      result.textContent = '✓ Verbindung zum Miniserver hergestellt. Prüfe als Nächstes den Eingangsnamen unter Discovery. Diese Prüfung sendet keinen Schaltbefehl.';
     } else {
       result.className = 'test-result error';
       result.textContent = '✗ ' + (data.error || 'Verbindung fehlgeschlagen');
@@ -879,6 +980,33 @@ async function deleteMQTTSubscription(topic) {
 
 let loxProposals = [];
 
+async function probeLoxoneInput(event) {
+  event.preventDefault();
+  const name = document.getElementById('probeName').value.trim();
+  const result = document.getElementById('probeResult');
+  result.className = 'test-result info';
+  result.textContent = 'Prüfe Eingang…';
+  try {
+    const res = await fetch(`${API}/discover/loxone?name=${encodeURIComponent(name)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Prüfung fehlgeschlagen');
+    if (data.status !== 'ok') {
+      throw new Error(data.status === 'access_denied'
+        ? 'Zugriff verweigert — Miniserver-Benutzer und Berechtigungen prüfen.'
+        : 'Eingang nicht lesbar. Exakten Namen, Eingangstyp und Übertragung des Programms auf den Miniserver prüfen.');
+    }
+    result.className = 'test-result ok';
+    result.textContent = `✓ ${name} ist erreichbar. `;
+    const link = document.createElement('a');
+    link.href = 'device.html?' + new URLSearchParams({vi: name, name: name.replace(/^echolox_/i, '').replaceAll('_', ' ')});
+    link.textContent = 'Als Gerät anlegen';
+    result.appendChild(link);
+  } catch (err) {
+    result.className = 'test-result error';
+    result.textContent = '✗ ' + err.message;
+  }
+}
+
 async function scanLoxone() {
   const btn = document.getElementById('scanBtn');
   const errEl = document.getElementById('loxError');
@@ -901,7 +1029,7 @@ async function scanLoxone() {
     if (!loxProposals.length) {
       // Miniserver returned no echolox_* VIs at all
       if (emptyEl) {
-        emptyEl.textContent = 'Keine echolox_*-Virtual Inputs auf dem Miniserver gefunden. Prüfe ob VIs mit dem Prefix „echolox_" im Loxone Programm angelegt sind.';
+        emptyEl.textContent = 'Keine passenden Bedienelemente in den App-Daten gefunden. Fehlende virtuelle Eingänge kannst du oben per Name prüfen und manuell zuordnen.';
         emptyEl.style.display = '';
       }
       return;
@@ -909,7 +1037,7 @@ async function scanLoxone() {
     const newCount = loxProposals.filter(p => !p.already_exists).length;
     if (!newCount && emptyEl) {
       // VIs found but every one is already imported — show info + still render table
-      emptyEl.textContent = `Alle ${loxProposals.length} gefundene(n) echolox_*-VI(s) bereits importiert — werden unten zur Übersicht angezeigt.`;
+      emptyEl.textContent = `Alle ${loxProposals.length} gefundene(n) Geräte bereits importiert — werden unten zur Übersicht angezeigt.`;
       emptyEl.style.display = '';
     }
     renderLoxProposals(loxProposals);
@@ -941,7 +1069,7 @@ function renderLoxProposals(proposals) {
     tr.innerHTML = `
       ${checkCell}
       <td>${p.display_name}</td>
-      <td><span class="type-badge">${p.type}</span></td>
+      <td><span class="type-badge">${deviceTypeLabels[p.type] || escapeHtml(p.type)}</span></td>
       <td>${p.type !== 'scene' ? modeLabel : '—'}</td>
       <td>${vis}</td>
       <td>${statusLabel}</td>`;

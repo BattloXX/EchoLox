@@ -38,6 +38,9 @@ func (c *Client) Send(viName, value string) error {
 }
 
 func (c *Client) sendHTTP(viName, value string) error {
+	if value == "Impuls" {
+		value = "pulse"
+	}
 	port := c.ms.Port
 	if port == "" {
 		port = "80"
@@ -54,9 +57,16 @@ func (c *Client) sendHTTP(viName, value string) error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("loxone HTTP %d for %s", resp.StatusCode, viName)
+	}
+	code, err := responseCode(resp.Body)
+	if err != nil {
+		return fmt.Errorf("%s: %w", viName, err)
+	}
+	if code != "200" {
+		return fmt.Errorf("Miniserver lehnt %s ab (Code %s) — Eingangsname und Berechtigungen prüfen", viName, code)
 	}
 	return nil
 }
