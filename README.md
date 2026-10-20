@@ -11,7 +11,7 @@
 
 ---
 
-> **v0.2.0** — Hue-Identität (apiversion 1.47.0, Royal Philips Electronics, Signify Netherlands B.V., capabilities, hue_logo Icons, description.xml mit iconList) und SSDP-Listener aus v0.1.8 wiederhergestellt — Alexa erkennt EchoLox-Geräte wieder zuverlässig. Loxone-Richtung (Impuls/Ein-Aus, VI-Discovery) unverändert. Go-Binaries werden ab sofort lokal gebaut und committed; CI erstellt nur noch den ZIP.
+> **v0.4.0** — Stabile Version mit korrigierter Miniserver-Anmeldung, frei zuordenbaren virtuellen Eingängen, direkter Namensprüfung, neuer Einrichtungshilfe und Verbesserungen bei Installation und Dienststart. [Release-Notes](docs/releases/0.4.0.md) · [Vollständiges Changelog](CHANGELOG.md)
 
 ---
 
@@ -509,7 +509,7 @@ EchoLox unterstützt LoxBerrys eingebaute **Plugin-Autoupdate-Funktion**. Der Pl
 
 Das vorhandene Autoupdate-Format wurde gegen LoxBerry 4.0.0 (Stand 4.0.0.13 stable) geprüft und ist kompatibel.
 
-Die `release.cfg` wird bei jedem Release automatisch durch GitHub Actions aktualisiert.
+GitHub Actions aktualisiert bei stabilen Releases `release.cfg` und `prerelease.cfg`. Prereleases aktualisieren ausschließlich `prerelease.cfg`.
 
 > **Nach einem Update:** Für den direkten Port-80-Modus setzt `postinstall.sh` `CAP_NET_BIND_SERVICE` automatisch neu. Im Reverse-Proxy-Modus wird die nicht benötigte Capability wieder entfernt.
 
@@ -622,12 +622,13 @@ GOOS=linux GOARCH=amd64       go build -o bin/EchoLox-amd64  ./cmd/EchoLox
 
 | Trigger | Ergebnis |
 |---|---|
-| Push auf `main` | Stabiles Release (automatische Patch-Version) |
+| Push auf `main` | Release mit der Version aus `plugin.cfg`; Versionen mit Suffix werden als Prerelease veröffentlicht |
 | `workflow_dispatch` mit `prerelease=true` | GitHub Prerelease |
 
 ```bash
 # Prerelease manuell erstellen:
 gh workflow run release.yml --field prerelease=true
+# Vorher: Version in plugin.cfg und Makefile setzen und alle Binaries neu bauen.
 ```
 
 ---

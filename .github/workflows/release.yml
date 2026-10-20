@@ -29,7 +29,13 @@ jobs:
         id: ver
         run: |
           V=$(grep -E '^VERSION = ' plugin.cfg | head -1 | sed 's/VERSION = //')
+          [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "::error::Ungültige Plugin-Version"; exit 1; }
           echo "version=$V" >> "$GITHUB_OUTPUT"
+          if [[ "$V" == *-* ]] || [ "${{ inputs.prerelease || 'false' }}" = "true" ]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
           echo "Release version: $V"
 
       - name: Verify locally compiled binaries are present
@@ -60,20 +66,37 @@ jobs:
           zip -r "EchoLox-${{ steps.ver.outputs.version }}.zip" * \
             -x "*.git*" -x "bin/EchoLox" -x "*.zip" -x "*.tmp" -x "go.sum" -x "generated-image.png"
 
+      - name: Check ZIP and create checksum
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          unzip -t "EchoLox-$V.zip"
+          for entry in plugin.cfg CHANGELOG.md bin/EchoLox-amd64 bin/EchoLox-arm64 bin/EchoLox-armv7 webembed/web/help.html; do
+            unzip -Z1 "EchoLox-$V.zip" | grep -Fx "$entry" >/dev/null || { echo "::error::ZIP missing $entry"; exit 1; }
+          done
+          sha256sum "EchoLox-$V.zip" > "EchoLox-$V.zip.sha256"
+          sha256sum -c "EchoLox-$V.zip.sha256"
+
       - name: Create release
         if: steps.check.outputs.exists == 'false'
         run: |
           V="${{ steps.ver.outputs.version }}"
-          COMMIT_MSG=$(git log -1 --pretty='%s')
-          PRERELEASE_FLAG=""
-          if [ "${{ inputs.prerelease || 'false' }}" = "true" ]; then
-            PRERELEASE_FLAG="--prerelease"
+          FLAGS=()
+          if [ "${{ steps.ver.outputs.prerelease }}" = "true" ]; then
+            FLAGS+=(--prerelease --latest=false)
+          else
+            FLAGS+=(--latest)
+          fi
+          if [ -f "docs/releases/$V.md" ]; then
+            FLAGS+=(--notes-file "docs/releases/$V.md")
+          else
+            FLAGS+=(--generate-notes)
           fi
           gh release create "v$V" \
+            --target "$GITHUB_SHA" \
             --title "EchoLox v$V" \
-            --notes "$(printf 'Build aus lokal kompilierten Bins\n\n**Commit:** %s' "$COMMIT_MSG")" \
-            $PRERELEASE_FLAG \
-            "EchoLox-$V.zip"
+            "${FLAGS[@]}" \
+            "EchoLox-$V.zip" "EchoLox-$V.zip.sha256"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -82,19 +105,24 @@ jobs:
         run: |
           V="${{ steps.ver.outputs.version }}"
           REPO="${{ github.repository }}"
+          if [ "${{ steps.ver.outputs.prerelease }}" = "true" ]; then
+            CHANNEL="prerelease.cfg"
+          else
+            CHANNEL="release.cfg"
+          fi
           {
             echo "[AUTOUPDATE]"
             echo "VERSION = $V"
             echo "ARCHIVEURL = https://github.com/$REPO/releases/download/v$V/EchoLox-$V.zip"
             echo "INFOURL = https://github.com/$REPO/releases/tag/v$V"
-          } > release.cfg
-          if [ "${{ inputs.prerelease || 'false' }}" = "true" ]; then
+          } > "$CHANNEL"
+          if [ "${{ steps.ver.outputs.prerelease }}" != "true" ]; then
             cp release.cfg prerelease.cfg
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add release.cfg prerelease.cfg
-          git diff --staged --quiet || git commit -m "chore: update release.cfg to v$V [skip ci]"
+          git diff --staged --quiet || git commit -m "chore: update release channels to v$V [skip ci]"
           git push
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
